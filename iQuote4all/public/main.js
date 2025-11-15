@@ -1,12 +1,14 @@
 // Firebase config
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyB5amYVfN2M6e1uUHvNh1cIlVD_Fa5g8eQ",
+  authDomain: "iquote4all.firebaseapp.com",
+  projectId: "iquote4all",
+  storageBucket: "iquote4all.firebasestorage.app",
+  messagingSenderId: "603028789594",
+  appId: "1:603028789594:web:b5b9cc5fc9b35e4512bb63",
+  measurementId: "G-TPW4DTTQEF"
 };
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
