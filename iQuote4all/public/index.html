@@ -1,0 +1,104 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iQuote4all | eBook Store</title>
+  
+  <!-- Fonts & Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  
+  <!-- Styles -->
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --secondary: #fbbf24;
+      --bg: #f5f5f5;
+      --text: #111827;
+      --card-shadow: 0 20px 40px rgba(0,0,0,0.1);
+    }
+    * { box-sizing:border-box; margin:0; padding:0; font-family:'Inter',sans-serif; }
+    body { background: var(--bg); color: var(--text); }
+
+    header {
+      position: fixed; top:0; left:0; right:0; display:flex;
+      justify-content:space-between; align-items:center;
+      padding: 15px 25px; background:#fff; box-shadow:0 2px 10px rgba(0,0,0,0.05); z-index:1000;
+    }
+    header h1 { font-weight:700; font-size:1.5rem; color: var(--primary); }
+    .hamburger { font-size:1.5rem; cursor:pointer; color: var(--text); transition:0.3s; }
+    .hamburger:hover { transform: scale(1.1); }
+
+    .sidebar {
+      position: fixed; top:0; left:-280px; width:280px; height:100%;
+      background:#1f2937; color:white; transition:0.4s;
+      padding-top:80px; z-index:999;
+      border-right:1px solid rgba(255,255,255,0.05);
+    }
+    .sidebar ul { list-style:none; }
+    .sidebar li {
+      padding:20px 30px; cursor:pointer; font-weight:600; font-size:1rem;
+      border-bottom:1px solid rgba(255,255,255,0.1); transition:0.2s;
+    }
+    .sidebar li:hover { background:#374151; }
+
+    .main-container {
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      padding:150px 20px 50px;
+      min-height:100vh; text-align:center;
+    }
+    .ebook-cover {
+      max-width:300px; width:100%; border-radius:12px;
+      box-shadow: var(--card-shadow); transition: transform 0.3s;
+    }
+    .ebook-cover:hover { transform: translateY(-10px) scale(1.02); }
+
+    h2 { margin-top:20px; font-size:2rem; font-weight:700; color: var(--primary); }
+
+    .btn {
+      margin:15px 0; padding:15px 40px; font-size:1rem; font-weight:600;
+      border:none; border-radius:12px; cursor:pointer; transition:0.3s;
+      box-shadow:0 5px 20px rgba(0,0,0,0.08);
+    }
+    .review-btn { background: var(--secondary); color:white; }
+    .review-btn:hover { transform: scale(1.05); box-shadow:0 10px 30px rgba(0,0,0,0.12); }
+    .buy-btn { background: var(--primary); color:white; }
+    .buy-btn:hover { transform: scale(1.05); box-shadow:0 10px 30px rgba(0,0,0,0.12); }
+
+    @media(max-width:768px){
+      .ebook-cover { max-width:220px; }
+      .btn { width:80%; padding:12px 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>iQuote4all</h1>
+    <div class="hamburger" onclick="toggleSidebar()"><i class="fas fa-bars"></i></div>
+  </header>
+
+  <div class="sidebar" id="sidebar">
+    <ul>
+      <li onclick="showTransaction()">Transaction</li>
+      <li>Contact Us</li>
+      <li>Follow us on YouTube</li>
+    </ul>
+  </div>
+
+  <div class="main-container">
+    <img src="book.jpg" alt="eBook Cover" class="ebook-cover">
+    <h2>Your Ultimate Quote eBook</h2>
+    <button class="btn review-btn" onclick="showReview()">Read Review</button>
+    <button class="btn buy-btn" onclick="buyEbook()">Buy eBook $15.99</button>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <!-- Paystack -->
+  <script src="https://js.paystack.co/v1/inline.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
