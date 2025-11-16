@@ -14,7 +14,7 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 // Config - replace with your Paystack public key
-const PAYSTACK_PUBLIC_KEY = 'YOUR_PAYSTACK_PUBLIC_KEY'; // <-- replace this
+const PAYSTACK_PUBLIC_KEY = 'pk_live_795c60d1769a1ebef31e9705886a91f84de3144d'; // <-- replace this
 
 // UI helpers
 function toggleSidebar(){
