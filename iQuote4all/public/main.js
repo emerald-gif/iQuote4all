@@ -1,4 +1,6 @@
-// Firebase config
+// =============================
+// Firebase Config
+// =============================
 const firebaseConfig = {
   apiKey: "AIzaSyB5amYVfN2M6e1uUHvNh1cIlVD_Fa5g8eQ",
   authDomain: "iquote4all.firebaseapp.com",
@@ -12,34 +14,102 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+// =============================
 // Sidebar toggle
-function toggleSidebar(){
-  const sidebar = document.getElementById('sidebar');
-  sidebar.style.left = sidebar.style.left === '0px' ? '-280px' : '0px';
+// =============================
+function toggleSidebar() {
+  const sidebar = document.getElementById("sidebar");
+  sidebar.style.left = sidebar.style.left === "0px" ? "-280px" : "0px";
 }
 
-// Placeholder functions
-function showReview(){ alert("Reviews coming soon!"); }
-function showTransaction(){ alert("Transactions coming soon!"); }
+// =============================
+// Show Review / Transactions (Temp)
+// =============================
+function showReview() {
+  alert("Reviews coming soon!");
+}
 
-// Paystack checkout
-function buyEbook(){
-  const handler = PaystackPop.setup({
-    key: 'YOUR_PAYSTACK_PUBLIC_KEY',
-    email: prompt("Enter your email to receive eBook"),
-    amount: 1599 * 100, // $15.99 in kobo
-    currency: "USD",
-    ref: ''+Math.floor(Math.random() * 1000000000 + 1),
-    callback: function(response){
-      alert('Payment successful. Ref: ' + response.reference);
-      // send to backend for verification
-      fetch('/verify', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({reference: response.reference})
-      });
-    },
-    onClose: function(){ alert('Payment cancelled'); }
-  });
-  handler.openIframe();
+function showTransaction() {
+  window.location.href = "/orders.html";
+}
+
+// =============================
+// Open Checkout Modal
+// =============================
+function buyEbook() {
+  document.getElementById("checkoutModal").style.display = "flex";
+}
+
+function closeCheckout() {
+  document.getElementById("checkoutModal").style.display = "none";
+}
+
+// =============================
+// Proceed To Payment
+// =============================
+async function proceedToPayment() {
+  const emailInput = document.getElementById("checkoutEmail");
+  const email = emailInput.value.trim();
+
+  if (!email) {
+    alert("Please enter your email.");
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/pay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        amount: 15.99,
+        productId: "ultimate_quote_bundle"
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.authorization_url) {
+      alert("Payment initialization failed.");
+      return;
+    }
+
+    window.location.href = data.authorization_url;
+  } catch (err) {
+    console.error(err);
+    alert("Error starting payment.");
+  }
+}
+
+// =============================
+// Load Past Orders
+// =============================
+async function loadOrders() {
+  const container = document.getElementById("ordersContainer");
+  container.innerHTML = "Loading...";
+
+  try {
+    const response = await fetch("/api/transactions");
+    const orders = await response.json();
+
+    if (!orders.length) {
+      container.innerHTML = "<p>No orders found.</p>";
+      return;
+    }
+
+    container.innerHTML = orders
+      .map(order => `
+        <div class="order-card">
+          <h3>Ultimate Quote Bundle</h3>
+          <p><strong>Email:</strong> ${order.email}</p>
+          <p><strong>Amount:</strong> $${order.amount}</p>
+          <p><strong>Status:</strong> ${order.status}</p>
+          <p><strong>Reference:</strong> ${order.reference}</p>
+        </div>
+      `)
+      .join("");
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = "Error loading orders.";
+  }
 }
