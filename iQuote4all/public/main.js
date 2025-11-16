@@ -169,6 +169,13 @@ async function verifyPayment(reference, purchaserEmail){
   }
 }
 
+
+function showReview() {
+  // Redirect user to the review page
+  window.location.href = "review.html";
+}
+
+
 // Small usability: close modal when clicking outside
 modalBackdrop.addEventListener('click', (e)=>{
   if(e.target === modalBackdrop) closeCheckoutModal();
