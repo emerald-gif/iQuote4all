@@ -1,6 +1,6 @@
 // public/main.js
 
-// FIREBASE (unchanged from yours)
+// FIREBASE (unchanged)
 const firebaseConfig = {
   apiKey: "AIzaSyB5amYVfN2M6e1uUHvNh1cIlVD_Fa5g8eQ",
   authDomain: "iquote4all.firebaseapp.com",
@@ -13,9 +13,44 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// Paystack public key — set this in the page with:
-// <script>window.PAYSTACK_PUBLIC_KEY = "pk_test_xxx";</script>
-const PAYSTACK_PUBLIC_KEY = window.PAYSTACK_PUBLIC_KEY || "pk_live_376059b66ee3ce9af512496bd97ee3896b18f7adp";
+// runtime config (will be filled by fetch /config)
+let PAYSTACK_PUBLIC_KEY = null;
+let PUBLIC_PDF_URL = null;
+let PAYSTACK_READY = false;
+
+// load config and Paystack inline script
+async function initConfigAndPaystack() {
+  try {
+    const res = await fetch('/config');
+    const cfg = await res.json();
+    PAYSTACK_PUBLIC_KEY = cfg.paystackPublicKey || null;
+    PUBLIC_PDF_URL = cfg.publicPdfUrl || null;
+
+    if (!PAYSTACK_PUBLIC_KEY) {
+      console.warn('Paystack public key not provided by server (/config). Set env PAYSTACK_PUBLIC_KEY.');
+    }
+
+    // inject Paystack inline script if not already present
+    if (!window.PaystackPop) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://js.paystack.co/v1/inline.js';
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Failed to load Paystack inline script'));
+        document.head.appendChild(s);
+      });
+    }
+
+    PAYSTACK_READY = true;
+    console.log('Paystack ready, public key loaded:', PAYSTACK_PUBLIC_KEY ? 'YES' : 'NO');
+  } catch (err) {
+    console.warn('Failed to init config or Paystack script:', err);
+  }
+}
+
+// immediately start config init
+initConfigAndPaystack();
 
 // UI helpers
 function toggleSidebar() {
@@ -26,7 +61,7 @@ function showReview() { window.location.href = "/review.html"; }
 function followYoutube() { window.open("https://youtube.com/@iquote4all?si=pnSVWwSmgvO5VFNl"); }
 function openContact() { alert("Contact: iquote4all@gmail.com"); }
 
-// Quote carousel (if you use .quote-slide)
+// Quote carousel (optional)
 let quoteIndex = 0;
 const slides = document.querySelectorAll(".quote-slide");
 const dots = document.querySelectorAll(".dot");
@@ -37,10 +72,7 @@ function showQuote(index) {
 }
 function nextQuote() { if (!slides.length) return; quoteIndex = (quoteIndex + 1) % slides.length; showQuote(quoteIndex); }
 function prevQuote() { if (!slides.length) return; quoteIndex = (quoteIndex - 1 + slides.length) % slides.length; showQuote(quoteIndex); }
-if (slides.length) {
-  setInterval(nextQuote, 5000);
-  showQuote(0);
-}
+if (slides.length) { setInterval(nextQuote, 5000); showQuote(0); }
 
 // Transactions listing
 async function showTransactions() {
@@ -55,7 +87,7 @@ async function showTransactions() {
   }
 }
 
-// Checkout modal
+// Checkout modal helpers
 const modalBackdrop = document.getElementById('modalBackdrop');
 function openCheckoutModal() {
   document.getElementById('buyerEmail').value = '';
@@ -63,12 +95,9 @@ function openCheckoutModal() {
   modalBackdrop.style.display = 'flex';
 }
 function closeCheckoutModal() { modalBackdrop.style.display = 'none'; }
-if (modalBackdrop) {
-  modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeCheckoutModal(); });
-}
+if (modalBackdrop) { modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeCheckoutModal(); }); }
 
-// DROP-IN: replace your existing proceedToPayment() with this exact function
-// DROP-IN: replace your existing proceedToPayment() with this exact function
+// Proceed to payment (DROP-IN fixed & uses server-side public key)
 async function proceedToPayment() {
   const emailInput = document.getElementById('buyerEmail');
   const nameInput = document.getElementById('buyerName');
@@ -85,33 +114,38 @@ async function proceedToPayment() {
   proceedBtn.textContent = 'Preparing...';
 
   try {
+    // 1) initialize on server
     const resp = await fetch('/api/pay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email })
     });
-
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || 'Failed to initialize payment.');
 
-    const { reference, amount } = data;
+    const { reference, amount } = data; // amount = NGN integer returned by server
     if (!reference) throw new Error('Payment reference missing from server response.');
 
-    // FIXED VERSION
-    if (!window.PaystackPop) {
-      throw new Error('Paystack inline script not loaded. Add: <script src="https://js.paystack.co/v1/inline.js"></script> before main.js');
-    }
-    if (
-      !window.PAYSTACK_PUBLIC_KEY ||
-      window.PAYSTACK_PUBLIC_KEY === "pk_live_376059b66ee3ce9af512496bd97ee3896b18f7adp"
-    ) {
-      throw new Error('Paystack public key not set. Add: <script>window.PAYSTACK_PUBLIC_KEY = "pk_test_xxx";</script> before the inline script.');
+    // wait for Paystack script + config to be ready (max ~5s)
+    const timeoutAt = Date.now() + 5000;
+    while (!PAYSTACK_READY && Date.now() < timeoutAt) {
+      await new Promise(r => setTimeout(r, 100));
     }
 
+    if (!PAYSTACK_READY) throw new Error('Paystack script not ready. Try again.');
+
+    if (!window.PaystackPop) throw new Error('Paystack inline script not loaded.');
+    if (!PAYSTACK_PUBLIC_KEY) {
+      // also accept window.PAYSTACK_PUBLIC_KEY if someone set it in page
+      PAYSTACK_PUBLIC_KEY = window.PAYSTACK_PUBLIC_KEY || PAYSTACK_PUBLIC_KEY;
+    }
+    if (!PAYSTACK_PUBLIC_KEY) throw new Error('Paystack public key not set on server (check /config).');
+
+    // Setup inline with a regular function for callback
     const handler = PaystackPop.setup({
-      key: window.PAYSTACK_PUBLIC_KEY,
+      key: PAYSTACK_PUBLIC_KEY,
       email: email,
-      amount: Math.round(Number(amount) * 100),
+      amount: Math.round(Number(amount) * 100), // NGN -> kobo
       currency: 'NGN',
       ref: reference,
       metadata: {
@@ -119,15 +153,14 @@ async function proceedToPayment() {
           { display_name: 'Buyer name', variable_name: 'buyer_name', value: name || '' }
         ]
       },
-
       callback: function (response) {
+        // call verifyPayment (async) from here
         verifyPayment(response.reference, email)
           .catch(err => {
             console.error('Verification error:', err);
             alert('Payment succeeded but verification failed. Contact support.');
           });
       },
-
       onClose: function () {
         proceedBtn.disabled = false;
         proceedBtn.textContent = 'Proceed to payment';
@@ -136,7 +169,6 @@ async function proceedToPayment() {
     });
 
     handler.openIframe();
-
   } catch (err) {
     console.error('proceedToPayment error:', err);
     alert(err.message || 'Payment failed to start.');
