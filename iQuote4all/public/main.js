@@ -101,7 +101,7 @@ async function proceedToPayment() {
     if (!window.PaystackPop) {
       throw new Error('Paystack inline script not loaded. Add: <script src="https://js.paystack.co/v1/inline.js"></script> before main.js');
     }
-    if (!window.PAYSTACK_PUBLIC_KEY || window.PAYSTACK_PUBLIC_KEY === 'YOUR_PAYSTACK_PUBLIC_KEY') {
+    if (!window.PAYSTACK_PUBLIC_KEY || window.PAYSTACK_PUBLIC_KEY === 'pk_live_376059b66ee3ce9af512496bd97ee3896b18f7adp) {
       throw new Error('Paystack public key not set. Add: <script>window.PAYSTACK_PUBLIC_KEY = "pk_test_xxx";</script> before the inline script.');
     }
 
