@@ -12,7 +12,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 // PAYSTACK PUBLIC KEY
-const PAYSTACK_PUBLIC_KEY = "pk_test_xxxxxxxxxxxxxxxxxxxx"; // <-- PUT YOUR TEST OR LIVE KEY
+const PAYSTACK_PUBLIC_KEY = "pk_live_376059b66ee3ce9af512496bd97ee3896b18f7ad"; // <-- PUT YOUR TEST OR LIVE KEY
 
 // Checkout Modal
 const modalBackdrop = document.getElementById("modalBackdrop");
