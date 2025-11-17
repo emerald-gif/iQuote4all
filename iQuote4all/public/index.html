@@ -128,17 +128,150 @@
 
   <main>
     <section class="hero">
-      <div class="quotes">
-        <div class="carousel" id="quoteCarousel">
-          <div class="quote" data-index="0">“If you can’t control the world, control your habits—your life will follow.”</div>
-          <div class="quote" data-index="1" style="display:none">“Whether you think you can or you think you can’t, you’re right.”</div>
-          <div class="quote" data-index="2" style="display:none">“We are what we repeatedly do.”</div>
-        </div>
-        <div class="controls">
-          <button id="prevQ" title="Previous" onclick="prevQuote()" style="background:transparent;border:none;color:var(--primary);cursor:pointer"><i class="fas fa-chevron-left"></i></button>
-          <button id="nextQ" title="Next" onclick="nextQuote()" style="background:transparent;border:none;color:var(--primary);cursor:pointer"><i class="fas fa-chevron-right"></i></button>
-        </div>
-      </div>
+
+
+
+
+      
+      <div class="quotes enhanced-swiper">
+  <div class="quote-slide active">
+    <p class="quote-text">“If you can’t control the world, control your habits—your life will follow.”</p>
+    <span class="quote-author">— iQuote4all</span>
+  </div>
+
+  <div class="quote-slide">
+    <p class="quote-text">“Whether you think you can or you think you can’t, you’re right.”</p>
+    <span class="quote-author">— iQuote4all</span>
+  </div>
+
+  <div class="quote-slide">
+    <p class="quote-text">“We are what we repeatedly do.”</p>
+    <span class="quote-author">— iQuote4all</span>
+  </div>
+
+  <!-- Navigation arrows -->
+  <button class="nav-arrow left" onclick="prevQuote()">
+    <i class="fas fa-chevron-left"></i>
+  </button>
+  <button class="nav-arrow right" onclick="nextQuote()">
+    <i class="fas fa-chevron-right"></i>
+  </button>
+
+  <!-- Dots indicator -->
+  <div class="quote-dots">
+    <span class="dot active"></span>
+    <span class="dot"></span>
+    <span class="dot"></span>
+  </div>
+</div>
+
+
+
+
+<style>
+
+
+
+/* Enhanced Swiper */
+.enhanced-swiper {
+  position: relative;
+  padding: 40px 28px 55px;
+  background: linear-gradient(140deg, rgba(79,70,229,0.12), rgba(6,182,212,0.10));
+  border-radius: 20px;
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+  text-align: center;
+  min-height: 180px;
+}
+
+.quote-slide {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.8s ease, transform 0.8s ease;
+  padding: 0 12px;
+}
+
+.quote-slide.active {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.quote-text {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.45;
+}
+
+.quote-author {
+  display: block;
+  margin-top: 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--primary);
+  opacity: 0.9;
+}
+
+/* Navigation arrows */
+.nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: white;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--primary);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: 0.25s;
+}
+
+.nav-arrow:hover {
+  transform: translateY(-50%) scale(1.08);
+}
+
+.nav-arrow.left { left: 12px; }
+.nav-arrow.right { right: 12px; }
+
+/* Dots */
+.quote-dots {
+  position: absolute;
+  bottom: 20px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  background: rgba(79,70,229,0.25);
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.dot.active {
+  width: 14px;
+  height: 14px;
+  background: var(--primary);
+}
+
+  
+</style>
+
+
+      
 
       <div class="promo-card">
         <img src="book.jpg" alt="The Ultimate Quote Bundle" class="ebook-cover" />
@@ -223,3 +356,4 @@
 
 </body>
 </html>
+
