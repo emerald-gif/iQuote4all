@@ -67,7 +67,7 @@ if (modalBackdrop) {
   modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeCheckoutModal(); });
 }
 
-// Proceed to payment — CLIENT sends only email, server returns reference + NGN amount
+// DROP-IN: replace your existing proceedToPayment() with this exact function
 async function proceedToPayment() {
   const emailInput = document.getElementById('buyerEmail');
   const nameInput = document.getElementById('buyerName');
@@ -84,32 +84,32 @@ async function proceedToPayment() {
   proceedBtn.textContent = 'Preparing...';
 
   try {
-    // request server to initialize (server will compute NGN amount)
+    // 1) Ask server to initialize the payment (server returns reference + amount (NGN integer))
     const resp = await fetch('/api/pay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email })
     });
+
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || 'Failed to initialize payment.');
 
-    const { reference, amount } = data; // amount = NGN integer
+    const { reference, amount } = data; // amount is NGN integer
+    if (!reference) throw new Error('Payment reference missing from server response.');
 
-    if (!reference) throw new Error('Payment reference missing.');
-
-    // ensure Paystack inline script is loaded and key is present
+    // 2) Guard: paystack inline script present and key set
     if (!window.PaystackPop) {
-      throw new Error('Paystack inline script not loaded. Add <script src="https://js.paystack.co/v1/inline.js"></script> to your HTML.');
+      throw new Error('Paystack inline script not loaded. Add: <script src="https://js.paystack.co/v1/inline.js"></script> before main.js');
     }
-    if (!PAYSTACK_PUBLIC_KEY || PAYSTACK_PUBLIC_KEY === 'YOUR_PAYSTACK_PUBLIC_KEY') {
-      throw new Error('PAYSTACK_PUBLIC_KEY not set. Place <script>window.PAYSTACK_PUBLIC_KEY = "pk_test_xxx";</script> in your index.html with your key.');
+    if (!window.PAYSTACK_PUBLIC_KEY || window.PAYSTACK_PUBLIC_KEY === 'YOUR_PAYSTACK_PUBLIC_KEY') {
+      throw new Error('Paystack public key not set. Add: <script>window.PAYSTACK_PUBLIC_KEY = "pk_test_xxx";</script> before the inline script.');
     }
 
-    // OPEN INLINE PAYSTACK POPUP (same page)
+    // 3) Set up Paystack inline. callback must be a valid function (not undefined)
     const handler = PaystackPop.setup({
-      key: PAYSTACK_PUBLIC_KEY,
-      email,
-      amount: Math.round(Number(amount) * 100), // amount is NGN; convert to kobo
+      key: window.PAYSTACK_PUBLIC_KEY,
+      email: email,
+      amount: Math.round(Number(amount) * 100), // NGN -> kobo
       currency: 'NGN',
       ref: reference,
       metadata: {
@@ -117,31 +117,32 @@ async function proceedToPayment() {
           { display_name: 'Buyer name', variable_name: 'buyer_name', value: name || '' }
         ]
       },
-      callback: async function (response) {
-        // response.reference available
-        try {
-          await verifyPayment(response.reference, email);
-        } catch (err) {
-          console.error('Verify error:', err);
-          alert('Payment completed but verification failed server-side. Contact support.');
-        } finally {
-          proceedBtn.disabled = false;
-          proceedBtn.textContent = 'Proceed to payment';
-          closeCheckoutModal();
-        }
+
+      // IMPORTANT: use a normal function here so Paystack sees a valid function value
+      callback: function (response) {
+        // response.reference exists
+        // call async verifyPayment but don't make callback itself async (Paystack expects a function)
+        verifyPayment(response.reference, email)
+          .catch(err => {
+            console.error('Error during verification:', err);
+            alert('Payment succeeded but server verification failed. Contact support.');
+          });
       },
+
       onClose: function () {
+        // user closed the inline popup
         proceedBtn.disabled = false;
         proceedBtn.textContent = 'Proceed to payment';
-        alert('Payment cancelled by user.');
+        alert('Payment window closed.');
       }
     });
 
+    // 4) open the inline iframe (same page)
     handler.openIframe();
 
   } catch (err) {
-    console.error(err);
-    alert(err.message || 'Failed to start payment.');
+    console.error('proceedToPayment error:', err);
+    alert(err.message || 'Payment failed to start.');
     proceedBtn.disabled = false;
     proceedBtn.textContent = 'Proceed to payment';
   }
