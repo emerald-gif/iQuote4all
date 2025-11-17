@@ -23,15 +23,14 @@ try {
   console.error("Firebase init error:", err);
   process.exit(1);
 }
-
 const db = admin.firestore();
 
-// Paystack config
+// Paystack config (secret on server only)
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const PAYSTACK_BASE = "https://api.paystack.co";
 
 // Price config
-const USD_PRICE = 15.99;
+const USD_PRICE = Number(process.env.USD_PRICE || '15.99');
 
 // Public URLs & PDF
 const PUBLIC_URL = process.env.PUBLIC_URL || '';
@@ -48,10 +47,9 @@ function toKobo(amount) {
   return Math.round(Number(amount) * 100);
 }
 
-// Get FX merchant_rate from Paystack init response (best-effort)
+// Best-effort: get fx merchant_rate from Paystack initialize response
 async function getExchangeRateFallback() {
-  // If Paystack returns an fx rate via /transaction/initialize when currency=NGN,
-  // we can reuse that response. We'll perform a small init request and try to extract.
+  if (!PAYSTACK_SECRET_KEY) return 1500;
   try {
     const res = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
       method: 'POST',
@@ -61,36 +59,39 @@ async function getExchangeRateFallback() {
       },
       body: JSON.stringify({
         email: 'fx_check@example.com',
-        amount: 100, // minor amount (kobo)
+        amount: 100, // small kobo amount
         currency: 'NGN'
       })
     });
     const json = await res.json();
-    // path: json.data.fees_breakdown[0].fx.merchant_rate (if available)
     const rate = json?.data?.fees_breakdown?.[0]?.fx?.merchant_rate;
     if (rate && !Number.isNaN(Number(rate))) return Number(rate);
   } catch (e) {
     console.warn('FX check failed:', e.message || e);
   }
-  // fallback if not available
-  return 1500; // sensible default NGN/USD rate (replace if you want a different default)
+  // fallback
+  return Number(process.env.FX_FALLBACK || 1500);
 }
 
-// 1) Initialize payment — server calculates NGN amount and returns reference + amount
+// ---------- /config endpoint (client requests public info) ----------
+app.get('/config', (req, res) => {
+  // serve the public key to client (safe) and pdf url
+  return res.json({
+    paystackPublicKey: process.env.PAYSTACK_PUBLIC_KEY || null,
+    publicPdfUrl: PUBLIC_PDF_URL
+  });
+});
+
+// 1) Initialize payment: server calculates NGN amount (from USD_PRICE) and initializes Paystack
 app.post('/api/pay', async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email required' });
+    if (!PAYSTACK_SECRET_KEY) return res.status(500).json({ error: 'Server missing Paystack secret key' });
 
-    if (!PAYSTACK_SECRET_KEY) {
-      return res.status(500).json({ error: 'Server misconfigured: missing Paystack secret key' });
-    }
-
-    // Get FX rate (best-effort). If this fails we use fallback.
     const fxRate = await getExchangeRateFallback(); // NGN per USD
     const ngnAmount = Math.round(USD_PRICE * fxRate); // integer NGN
 
-    // Initialize Paystack payment (NGN)
     const initResp = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
       method: 'POST',
       headers: {
@@ -106,8 +107,7 @@ app.post('/api/pay', async (req, res) => {
           usd_price: USD_PRICE,
           fx_rate: fxRate,
           ngn_charged: ngnAmount
-        },
-        // optional: callback_url: `${PUBLIC_URL}/`   // Paystack redirect (we use inline)
+        }
       })
     });
 
@@ -117,7 +117,7 @@ app.post('/api/pay', async (req, res) => {
       return res.status(400).json({ error: msg, details: initJson });
     }
 
-    // Save initial transaction document (optional)
+    // try write initialized transaction to firestore (non-fatal)
     try {
       await db.collection('transactions').doc(initJson.data.reference).set({
         reference: initJson.data.reference,
@@ -128,32 +128,26 @@ app.post('/api/pay', async (req, res) => {
         createdAt: admin.firestore.Timestamp.now()
       });
     } catch (e) {
-      console.warn('Failed to write initial transaction to Firestore:', e.message || e);
-      // don't fail the flow if saving initial transaction fails
+      console.warn('Failed to save init transaction:', e.message || e);
     }
 
-    // Return necessary values to client
     return res.json({
       authorization_url: initJson.data.authorization_url,
       reference: initJson.data.reference,
-      amount: ngnAmount // integer NGN
+      amount: ngnAmount // integer NGN (client can use if needed)
     });
-
   } catch (err) {
     console.error('Init payment error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
 
-// 2) Verify payment after client callback (server-side verification & record)
+// 2) Verify payment: server verifies with Paystack and saves to Firestore + sends email via EmailJS (if configured)
 app.post('/api/verify', async (req, res) => {
   try {
     const { reference, purchaserEmail } = req.body;
     if (!reference) return res.status(400).json({ error: 'Reference required' });
-
-    if (!PAYSTACK_SECRET_KEY) {
-      return res.status(500).json({ error: 'Server misconfigured: missing Paystack secret key' });
-    }
+    if (!PAYSTACK_SECRET_KEY) return res.status(500).json({ error: 'Server missing Paystack secret key' });
 
     const verifyResp = await fetch(`${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`, {
       method: 'GET',
@@ -161,17 +155,12 @@ app.post('/api/verify', async (req, res) => {
     });
 
     const verifyJson = await verifyResp.json();
-
     if (!verifyJson || verifyJson.status !== true) {
       return res.json({ status: 'failed', data: verifyJson });
     }
 
     const tx = verifyJson.data;
-
-    if (tx.status !== 'success') {
-      // Not paid
-      return res.json({ status: 'failed', data: verifyJson });
-    }
+    if (tx.status !== 'success') return res.json({ status: 'failed', data: verifyJson });
 
     const userEmail = purchaserEmail || tx.customer?.email || null;
     const ngnAmountPaid = (tx.amount || 0) / 100;
@@ -220,26 +209,23 @@ app.post('/api/verify', async (req, res) => {
       } catch (e) {
         console.warn('EmailJS send failed:', e.message || e);
       }
-    } else {
-      // EmailJS not configured or no purchaser email — skip
     }
 
     return res.json({ status: 'success' });
-
   } catch (err) {
     console.error('Verify payment error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
 
-// Transactions listing (optional)
+// Transactions listing
 app.get('/api/transactions', async (req, res) => {
   try {
     const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(50).get();
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     return res.json(rows);
   } catch (e) {
-    console.error('Failed fetching transactions:', e);
+    console.error('Fetch transactions error:', e);
     return res.status(500).json({ error: e.message });
   }
 });
@@ -251,4 +237,4 @@ app.get('*', (req, res) => {
 
 // Start
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on ${PORT} (PUBLIC_URL=${PUBLIC_URL})`));
