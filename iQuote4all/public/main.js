@@ -23,7 +23,7 @@ function toggleSidebar() {
 }
 
 function showReview() { window.location.href = "/review.html"; }
-function followYoutube() { window.open("https://www.youtube.com/", "_blank"); }
+function followYoutube() { window.open("https://youtube.com/@iquote4all?si=pnSVWwSmgvO5VFNl"); }
 function openContact() { alert("Contact: iquote4all@gmail.com"); }
 
 // ───────── QUOTE CAROUSEL ─────────
