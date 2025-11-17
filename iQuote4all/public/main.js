@@ -38,7 +38,6 @@ function showQuote(i) {
 }
 
 function nextQuote() { showQuote((currentQuote + 1) % quotes.length); }
-function prevQuote() { showQuote((currentQuote - 1 + quotes.length) % quotes.length); }
 
 if (quotes.length) {
   setInterval(nextQuote, 6000);
@@ -73,19 +72,18 @@ function closeCheckoutModal() {
   modalBackdrop.style.display = "none";
 }
 
-// close modal when clicking outside
+// close modal on backdrop click
 if (modalBackdrop) {
   modalBackdrop.addEventListener("click", e => {
     if (e.target === modalBackdrop) closeCheckoutModal();
   });
 }
 
-// ───────── START PAYMENT (CLEAN + FIXED) ─────────
+// ─────────────────────────────────────────────
+// 🔥 START PAYMENT — NEW VERSION (NO USD CLIENT)
+// ─────────────────────────────────────────────
 async function proceedToPayment() {
-  const emailField = document.getElementById("buyerEmail");
-  const nameField = document.getElementById("buyerName");
-  const email = emailField.value.trim();
-  const name = nameField.value.trim();
+  const email = document.getElementById("buyerEmail").value.trim();
 
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
     alert("Please enter a valid email.");
@@ -94,76 +92,40 @@ async function proceedToPayment() {
 
   const proceedBtn = document.querySelector(".modal .buy-btn");
   proceedBtn.disabled = true;
-  proceedBtn.textContent = "Preparing...";
+  proceedBtn.textContent = "Preparing payment...";
 
   try {
-    // init payment on backend
+    // 1️⃣ Request NGN amount + reference from server
     const res = await fetch("/api/pay", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        amount: 15.99,
-        productId: "ultimate-quote-bundle"
-      })
+      body: JSON.stringify({ email })
     });
 
     const data = await res.json();
-
-    if (!res.ok) throw new Error(data.message || "Unable to start payment.");
+    if (!res.ok) throw new Error(data.error || "Unable to start payment.");
 
     const { authorization_url, reference } = data;
-    if (!reference) throw new Error("Server did not return a payment reference.");
+    if (!reference) throw new Error("No reference returned from server");
 
-    // ───────── INLINE PAYSTACK FIXED ─────────
-    if (window.PaystackPop && PAYSTACK_PUBLIC_KEY !== "YOUR_PAYSTACK_PUBLIC_KEY") {
-      const handler = PaystackPop.setup({
-        key: PAYSTACK_PUBLIC_KEY,
-        email: email,
-        amount: Math.round(15.99 * 100),
-        ref: reference,
-        currency: "USD",
+    // 2️⃣ Always use hosted checkout (correct for NGN)
+    window.open(authorization_url, "_blank");
 
-        callback: async function (response) {
-          try {
-            await verifyPayment(response.reference, email);
-          } catch (err) {
-            console.error(err);
-            alert("Payment processed but verification failed.");
-          } finally {
-            proceedBtn.disabled = false;
-            proceedBtn.textContent = "Proceed to payment";
-            closeCheckoutModal();
-          }
-        },
+    alert("Complete your payment in the opened Paystack window.");
 
-        onClose: function () {
-          proceedBtn.disabled = false;
-          proceedBtn.textContent = "Proceed to payment";
-          alert("Payment window closed.");
-        }
-      });
-
-      handler.openIframe();
-    }
-
-    // ───────── FALLBACK (NO PAYSTACKPOP) ─────────
-    else {
-      window.open(authorization_url, "_blank");
-      alert("Complete payment in the new window, then return here.");
-
+    // 3️⃣ Optional: poll verification after delay
+    setTimeout(async () => {
       await verifyPayment(reference, email);
-      proceedBtn.disabled = false;
-      proceedBtn.textContent = "Proceed to payment";
-      closeCheckoutModal();
-    }
+    }, 3000);
 
   } catch (err) {
+    alert(err.message);
     console.error(err);
-    alert(err.message || "Payment could not start.");
-    proceedBtn.disabled = false;
-    proceedBtn.textContent = "Proceed to payment";
   }
+
+  proceedBtn.disabled = false;
+  proceedBtn.textContent = "Proceed to payment";
+  closeCheckoutModal();
 }
 
 // ───────── VERIFY PAYMENT ─────────
@@ -177,12 +139,14 @@ async function verifyPayment(reference, purchaserEmail) {
 
     const data = await res.json();
 
-    if (res.ok && data.status === "success") {
+    if (data.status === "success") {
       alert("Payment successful! Check your email for the eBook.");
       window.location.href = "/";
     } else {
-      alert("Verification failed. If money was deducted, contact support.");
+      console.log(data);
+      alert("Payment not completed yet. If money was deducted, contact support.");
     }
+
   } catch (err) {
     console.error(err);
     alert("Verification error. Contact support.");
