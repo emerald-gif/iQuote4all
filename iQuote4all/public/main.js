@@ -27,22 +27,34 @@ function followYoutube() { window.open("https://youtube.com/@iquote4all?si=pnSVW
 function openContact() { alert("Contact: iquote4all@gmail.com"); }
 
 // ───────── QUOTE CAROUSEL ─────────
-let currentQuote = 0;
-const quotes = document.querySelectorAll(".quote") || [];
+/* Enhanced Quote Swiper */
+let quoteIndex = 0;
+const slides = document.querySelectorAll(".quote-slide");
+const dots = document.querySelectorAll(".dot");
 
-function showQuote(i) {
-  if (!quotes.length) return;
-  quotes.forEach(q => q.style.display = "none");
-  quotes[i].style.display = "block";
-  currentQuote = i;
+function showQuote(index) {
+  slides.forEach((slide, i) => {
+    slide.classList.toggle("active", i === index);
+  });
+  dots.forEach((dot, i) => {
+    dot.classList.toggle("active", i === index);
+  });
 }
 
-function nextQuote() { showQuote((currentQuote + 1) % quotes.length); }
-
-if (quotes.length) {
-  setInterval(nextQuote, 6000);
-  showQuote(0);
+function nextQuote() {
+  quoteIndex = (quoteIndex + 1) % slides.length;
+  showQuote(quoteIndex);
 }
+
+function prevQuote() {
+  quoteIndex = (quoteIndex - 1 + slides.length) % slides.length;
+  showQuote(quoteIndex);
+}
+
+/* Auto slide every 5 seconds */
+setInterval(nextQuote, 5000);
+
+showQuote(0);
 
 // ───────── TRANSACTIONS LIST ─────────
 async function showTransactions() {
