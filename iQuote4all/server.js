@@ -47,11 +47,8 @@ const EMAILJS_SERVICE_ID = process.env.EMAILJS_SERVICE_ID;
 const EMAILJS_TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID;
 const EMAILJS_PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY;
 
-// FIXED — remove "..pdf"
 const PDF_FILE_PATH = process.env.PDF_FILE_PATH || "files/THE ULTIMATE QUOTE BUNDLE.pdf";
-
-// FIXED — missing backticks
-const PUBLIC_PDF_URL = `${PUBLIC_URL}/${PDF_FILE_PATH.replace(/^\//, "")}`;
+const PUBLIC_PDF_URL = `${PUBLIC_URL}/${PDF_FILE_PATH.replace(/^\/+/, "")}`;
 
 const toSmallest = amount => Math.round(Number(amount) * 100);
 
@@ -186,6 +183,7 @@ app.post("/api/verify", async (req, res) => {
                 });
 
                 console.log("📧 Email sent →", userEmail);
+
             } catch (e) {
                 console.warn("⚠️ Email send failed:", e.message);
             }
@@ -205,7 +203,7 @@ app.post("/api/verify", async (req, res) => {
 app.get("/api/transactions", async (req, res) => {
     try {
         const snap = await db.collection("transactions")
-            .orderBy("createdAt", "asc")
+            .orderBy("createdAt", "desc")
             .limit(50)
             .get();
 
