@@ -68,6 +68,7 @@ if (modalBackdrop) {
 }
 
 // DROP-IN: replace your existing proceedToPayment() with this exact function
+// DROP-IN: replace your existing proceedToPayment() with this exact function
 async function proceedToPayment() {
   const emailInput = document.getElementById('buyerEmail');
   const nameInput = document.getElementById('buyerName');
@@ -84,7 +85,6 @@ async function proceedToPayment() {
   proceedBtn.textContent = 'Preparing...';
 
   try {
-    // 1) Ask server to initialize the payment (server returns reference + amount (NGN integer))
     const resp = await fetch('/api/pay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -94,22 +94,24 @@ async function proceedToPayment() {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || 'Failed to initialize payment.');
 
-    const { reference, amount } = data; // amount is NGN integer
+    const { reference, amount } = data;
     if (!reference) throw new Error('Payment reference missing from server response.');
 
-    // 2) Guard: paystack inline script present and key set
+    // FIXED VERSION
     if (!window.PaystackPop) {
       throw new Error('Paystack inline script not loaded. Add: <script src="https://js.paystack.co/v1/inline.js"></script> before main.js');
     }
-    if (!window.PAYSTACK_PUBLIC_KEY || window.PAYSTACK_PUBLIC_KEY === 'pk_live_376059b66ee3ce9af512496bd97ee3896b18f7adp) {
+    if (
+      !window.PAYSTACK_PUBLIC_KEY ||
+      window.PAYSTACK_PUBLIC_KEY === "pk_live_376059b66ee3ce9af512496bd97ee3896b18f7adp"
+    ) {
       throw new Error('Paystack public key not set. Add: <script>window.PAYSTACK_PUBLIC_KEY = "pk_test_xxx";</script> before the inline script.');
     }
 
-    // 3) Set up Paystack inline. callback must be a valid function (not undefined)
     const handler = PaystackPop.setup({
       key: window.PAYSTACK_PUBLIC_KEY,
       email: email,
-      amount: Math.round(Number(amount) * 100), // NGN -> kobo
+      amount: Math.round(Number(amount) * 100),
       currency: 'NGN',
       ref: reference,
       metadata: {
@@ -118,26 +120,21 @@ async function proceedToPayment() {
         ]
       },
 
-      // IMPORTANT: use a normal function here so Paystack sees a valid function value
       callback: function (response) {
-        // response.reference exists
-        // call async verifyPayment but don't make callback itself async (Paystack expects a function)
         verifyPayment(response.reference, email)
           .catch(err => {
-            console.error('Error during verification:', err);
-            alert('Payment succeeded but server verification failed. Contact support.');
+            console.error('Verification error:', err);
+            alert('Payment succeeded but verification failed. Contact support.');
           });
       },
 
       onClose: function () {
-        // user closed the inline popup
         proceedBtn.disabled = false;
         proceedBtn.textContent = 'Proceed to payment';
         alert('Payment window closed.');
       }
     });
 
-    // 4) open the inline iframe (same page)
     handler.openIframe();
 
   } catch (err) {
