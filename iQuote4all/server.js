@@ -56,23 +56,22 @@ async function getExchangeRate() {
       },
       body: JSON.stringify({
         email: "fx_test@example.com",
-        amount: 100, // 1 NGN in kobo
+        amount: 100,
         currency: "NGN"
       })
     });
 
     const data = await res.json();
 
-    // From Paystack docs: fx object contains USD → NGN rate
     if (data?.data?.fees_breakdown?.[0]?.fx?.merchant_rate) {
       return data.data.fees_breakdown[0].fx.merchant_rate;
     }
 
-    console.log("⚠ No FX rate found, fallback to manual");
-    return 1500; // fallback NGN/USD rate
+    return 1500;
+
   } catch (e) {
     console.error("FX fetch error:", e);
-    return 1500; // fallback rate
+    return 1500;
   }
 }
 
@@ -85,14 +84,9 @@ app.post("/api/pay", async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email required" });
 
-    // Get current FX rate
-    const rate = await getExchangeRate();  // e.g. 1550 NGN / $1
-
-    // Convert USD → NGN
+    // Get FX rate
+    const rate = await getExchangeRate();
     const ngnAmount = Math.round(USD_PRICE * rate);
-
-    console.log(`💱 FX Rate: $1 = ₦${rate}`);
-    console.log(`💸 Charging NGN: ₦${ngnAmount}`);
 
     // Initialize Paystack
     const paystackRes = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
@@ -103,7 +97,7 @@ app.post("/api/pay", async (req, res) => {
       },
       body: JSON.stringify({
         email,
-        amount: ngnAmount * 100, // kobo
+        amount: ngnAmount * 100,
         currency: "NGN",
         metadata: {
           productId: "ultimate-quote-bundle",
@@ -122,7 +116,8 @@ app.post("/api/pay", async (req, res) => {
 
     return res.json({
       authorization_url: data.data.authorization_url,
-      reference: data.data.reference
+      reference: data.data.reference,
+      amount: ngnAmount
     });
 
   } catch (err) {
@@ -152,16 +147,15 @@ app.post("/api/verify", async (req, res) => {
         reference,
         email: purchaserEmail,
         status: "success",
-        usd_price: payData.metadata?.usd_price,
+        usd_price: payData.metadata?.usd_price || USD_PRICE,
         ngn_amount: payData.amount / 100,
         fx_rate: payData.metadata?.fx_rate,
         paidAt: admin.firestore.Timestamp.now()
       };
 
-      // Save order
       await db.collection("my order").add(record);
 
-      // Send email with PDF link
+      // Send email with PDF
       if (EMAILJS_SERVICE_ID) {
         await fetch("https://api.emailjs.com/api/v1.0/email/send", {
           method: "POST",
@@ -196,7 +190,6 @@ app.post("/api/verify", async (req, res) => {
 app.get("*", (req, res) => {
   res.sendFile(path.resolve(__dirname, "public", "index.html"));
 });
-
 
 // Start
 const PORT = process.env.PORT || 3000;
