@@ -15,7 +15,7 @@ const db = firebase.firestore();
 
 // Paystack public key — set this in the page with:
 // <script>window.PAYSTACK_PUBLIC_KEY = "pk_test_xxx";</script>
-const PAYSTACK_PUBLIC_KEY = window.PAYSTACK_PUBLIC_KEY || "YOUR_PAYSTACK_PUBLIC_KEY";
+const PAYSTACK_PUBLIC_KEY = window.PAYSTACK_PUBLIC_KEY || "pk_live_376059b66ee3ce9af512496bd97ee3896b18f7adp";
 
 // UI helpers
 function toggleSidebar() {
