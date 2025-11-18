@@ -3,215 +3,307 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>My Orders — iQuote4all</title>
+  <title>My Orders — Track</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
   <style>
-    :root{--primary:#6c5ce7;--bg:#f4f6fb;--muted:#6b7280}
+    :root {
+      --primary:#6c5ce7;
+      --bg:#f4f6fb;
+      --muted:#6b7280;
+    }
     *{box-sizing:border-box;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-    body{background:linear-gradient(180deg,#f7f9ff,#f3f6fb);margin:0;color:#0f172a}
 
-    /* ===== TOP NAV ===== */
-    .topnav{
-      height:60px;
-      background:#ffffffee;
-      backdrop-filter:blur(6px);
+    body {
+      background:linear-gradient(180deg,#f7f9ff,#f3f6fb);
+      margin:0;
+      padding:0;
+      color:#0f172a;
+    }
+
+    /* ------------------------------ NAVBAR ----------------------------- */
+    header {
+      width:100%;
+      background:#fff;
+      padding:16px;
       display:flex;
-      align-items:center;
       justify-content:space-between;
-      padding:0 18px;
-      border-bottom:1px solid #e8ecf5;
+      align-items:center;
+      box-shadow:0 4px 20px rgba(0,0,0,0.05);
       position:sticky;
       top:0;
-      z-index:50;
+      z-index:1000;
     }
-    .logo{font-weight:700;font-size:1.2rem;color:var(--primary)}
-    .hamburger{font-size:26px;cursor:pointer;padding:6px}
 
-    /* ===== SIDEBAR ===== */
-    .sidebar{
-      width:260px;
-      background:#fff;
+    header .logo {
+      font-size:1.3rem;
+      font-weight:700;
+      color:var(--primary);
+    }
+
+    .hamburger {
+      font-size:26px;
+      cursor:pointer;
+      padding:6px 10px;
+      border-radius:8px;
+      background:#f1f1ff;
+    }
+
+    /* ------------------------------ SIDEBAR ----------------------------- */
+    .sidebar {
+      width:250px;
+      background:#ffffff;
       height:100vh;
       position:fixed;
       top:0;
       left:-260px;
-      padding:20px;
-      transition:0.3s ease-in-out;
-      z-index:99;
-      box-shadow:4px 0 20px rgba(0,0,0,0.05);
+      padding:25px;
+      box-shadow:0 0 20px rgba(0,0,0,0.09);
+      transition:0.3s;
+      z-index:2000;
     }
-    .sidebar.open{left:0}
-    .sidebar ul{list-style:none;padding:0;margin-top:30px}
-    .sidebar li{
+
+    .sidebar.open { left:0; }
+
+    .sidebar ul { list-style:none;padding:0;margin:0; }
+    .sidebar li {
       padding:14px 0;
-      border-bottom:1px solid #f1f3f8;
-      font-size:1.05rem;
+      font-size:1rem;
+      font-weight:600;
       cursor:pointer;
+      border-bottom:1px solid #eee;
     }
 
-    /* ===== PAGE CONTENT ===== */
-    .container{max-width:980px;margin:0 auto;padding:20px}
-    header{margin-top:20px}
-    header h1{font-size:1.4rem;color:var(--primary);margin-bottom:4px}
+    /* ------------------------------ MAIN WRAPPER ----------------------------- */
+    .container {
+      padding:24px;
+      max-width:900px;
+      margin:0 auto;
+      margin-top:20px;
+    }
 
-    .track-panel{
+    .page-title {
+      font-size:1.4rem;
+      font-weight:700;
+      margin-bottom:8px;
+      color:var(--primary);
+    }
+    .subtitle {
+      font-size:0.9rem;
+      color:var(--muted);
+      margin-bottom:20px;
+    }
+
+    /* ------------------------------ TRACK PANEL ----------------------------- */
+    .track-panel {
       background:#fff;
       padding:18px;
       border-radius:14px;
       box-shadow:0 10px 30px rgba(12,18,35,0.06);
       display:flex;
       gap:12px;
+      align-items:center;
+    }
+
+    .track-panel input {
+      flex:1;
+      padding:12px;
+      border-radius:10px;
+      border:1px solid #e6e9f2;
+      font-size:1rem;
+    }
+
+    .btn {
+      padding:10px 14px;
+      border-radius:10px;
+      border:none;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .btn--primary {
+      background:linear-gradient(90deg,var(--primary),#06b6d4);
+      color:#fff;
+    }
+
+    /* ------------------------------ RESULTS GRID ----------------------------- */
+    .results {
       margin-top:20px;
-    }
-    .track-panel input{
-      flex:1;padding:12px;border-radius:10px;
-      border:1px solid #e6e9f2;font-size:1rem
-    }
-    .btn{
-      padding:10px 14px;border-radius:10px;border:none;
-      font-weight:700;cursor:pointer
-    }
-    .btn--primary{
-      background:linear-gradient(90deg,var(--primary),#06b6d4);color:#fff
-    }
-
-    .results{
-      margin-top:24px;
       display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
-      gap:14px
+      grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+      gap:14px;
     }
 
-    .order-card{
+    .order-card {
       background:linear-gradient(180deg,#fff,#fbfdff);
       padding:18px;
       border-radius:14px;
       border:1px solid rgba(12,18,35,0.04);
-      box-shadow:0 8px 26px rgba(12,18,35,0.06)
+      box-shadow:0 8px 26px rgba(12,18,35,0.06);
     }
-    .order-card h3{margin:0 0 8px 0;font-size:1rem}
-    .meta{font-size:0.93rem;color:var(--muted);margin-bottom:8px}
-    .pill{
+
+    .order-card h3 {
+      margin:0 0 8px 0;
+      font-size:1rem;
+      font-weight:700;
+    }
+
+    .meta {
+      font-size:0.9rem;
+      color:var(--muted);
+      margin-bottom:8px;
+    }
+
+    .pill {
       display:inline-block;
       padding:6px 10px;
       border-radius:999px;
       background:#eef2ff;
       color:var(--primary);
       font-weight:700;
-      font-size:0.85rem
+      font-size:0.85rem;
     }
-    .download{
-      background:#0f172a;color:#fff;
-      padding:10px 14px;border-radius:10px;
-      text-decoration:none;font-weight:700;
-      display:inline-block;margin-top:12px
+
+    .actions {
+      margin-top:12px;
     }
-    .empty{text-align:center;padding:30px;color:var(--muted)}
+
+    .download {
+      background:#0f172a;
+      color:#fff;
+      padding:10px 12px;
+      border-radius:10px;
+      text-decoration:none;
+      font-weight:700;
+      display:inline-block;
+    }
+
+    .empty {
+      padding:28px;
+      text-align:center;
+      color:var(--muted);
+      width:100%;
+    }
+
+    @media(max-width:600px){
+      .track-panel {flex-direction:column;align-items:flex-start;}
+      .btn{width:100%;}
+      .container{padding:16px;}
+    }
   </style>
 </head>
 
 <body>
 
-  <!-- ===== TOP NAV ===== -->
-  <div class="topnav">
+  <!-- TOP NAV -->
+  <header>
     <div class="logo">iQuote4all</div>
     <div class="hamburger" onclick="toggleSidebar()">☰</div>
-  </div>
+  </header>
 
-  <!-- ===== SIDEBAR ===== -->
+  <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <ul>
-      <li onclick="openMyOrder()">My Order</li>
+      <li onclick="openMyOrder()">My Orders</li>
       <li onclick="openContact()">Contact Us</li>
       <li onclick="followYoutube()">Follow us on YouTube</li>
     </ul>
   </aside>
 
-  <!-- ===== MAIN PAGE ===== -->
+  <!-- PAGE CONTENT -->
   <div class="container">
-    <header>
-      <h1>Track your orders</h1>
-      <div style="font-size:0.85rem;color:var(--muted)">
-        Enter the email you used during checkout to view all your orders.
-      </div>
-    </header>
+    <div class="page-title">Track your orders</div>
+    <div class="subtitle">Enter the email you used when buying your eBook</div>
 
     <div class="track-panel">
       <input id="emailInput" type="email" placeholder="you@example.com">
       <button id="trackBtn" class="btn btn--primary">Track order</button>
     </div>
 
-    <div id="status" style="margin-top:10px;font-size:0.88rem;color:var(--muted)"></div>
+    <div id="status" style="margin-top:10px;color:var(--muted);font-size:0.9rem;"></div>
 
     <div id="results" class="results"></div>
   </div>
 
   <script>
-    // ========== SIDEBAR TOGGLE ==========
+    /* --------------------- SIDEBAR FUNCTIONS ---------------------- */
     function toggleSidebar(){
       document.getElementById("sidebar").classList.toggle("open");
     }
+    function openMyOrder(){
+      window.location.href = "/myorder.html";
+    }
+    function openContact(){
+      window.location.href = "/contact.html";
+    }
+    function followYoutube(){
+      window.open("https://youtube.com/@iquote4all","_blank");
+    }
 
-    // ========== ORDER TRACKER LOGIC ==========
+    /* --------------------- ORDER TRACKING LOGIC ---------------------- */
     const status = document.getElementById('status');
     const results = document.getElementById('results');
     const trackBtn = document.getElementById('trackBtn');
     const emailInput = document.getElementById('emailInput');
 
-    trackBtn.addEventListener('click', fetchOrders);
-    emailInput.addEventListener('keyup', e => { if (e.key === 'Enter') fetchOrders(); });
-
-    async function fetchOrders(){
+    trackBtn.addEventListener('click', async () => {
       const email = (emailInput.value||"").trim().toLowerCase();
       results.innerHTML = "";
       status.textContent = "";
 
       if (!email){
-        status.textContent = "Please enter a valid email.";
+        status.textContent = "Please enter an email.";
         return;
       }
 
       status.textContent = "Searching...";
 
-      try{
+      try {
         const resp = await fetch("/api/orders?email=" + encodeURIComponent(email));
-        const data = await resp.json();
+        const json = await resp.json();
+        if (!resp.ok) throw new Error(json.error||"Error");
 
-        if (!resp.ok) throw new Error(data.error);
-
-        if (data.count === 0){
+        if (!json.count){
           status.textContent = "No orders found.";
-          results.innerHTML = `<div class="empty">No orders found for this email.</div>`;
+          results.innerHTML = '<div class="empty">No orders found for this email.</div>';
           return;
         }
 
-        status.textContent = `Found ${data.count} order(s).`;
+        status.textContent = `Found ${json.count} order(s).`;
 
-        data.rows.forEach(order=>{
-          const ref = order.reference || order.id;
-          const date = order.paidAt ? new Date(order.paidAt._seconds*1000).toLocaleString() : "";
-          const pdf = order.pdfUrl || "/files/THE ULTIMATE QUOTE BUNDLE.pdf";
-
+        json.rows.forEach(order => {
           const card = document.createElement("article");
           card.className = "order-card";
+
+          const price = "15.99";
+
           card.innerHTML = `
-            <h3>Reference: ${ref}</h3>
-            <div class="meta">Channel: <strong>${order.paystack?.channel || "—"}</strong> • Date: ${date}</div>
-            <div>Amount: <span class="pill">$15.99</span></div>
-            <div style="margin-top:8px">Ref ID: <code>${ref}</code></div>
-            <a class="download" href="${pdf}" target="_blank">Download PDF</a>
+            <h3>Reference: ${order.reference||order.id}</h3>
+            <div class="meta">
+              Channel: <strong>${order.paystack?.channel||"—"}</strong> • 
+              Date: ${order.paidAt ? new Date(order.paidAt._seconds*1000).toLocaleString() : ""}
+            </div>
+
+            <div>Amount: <span class="pill">$${price}</span></div>
+            <div style="margin-top:8px">Ref ID: <code>${order.reference||order.id}</code></div>
+
+            <div class="actions">
+              <a class="download" target="_blank" href="${order.pdfUrl || '/files/THE ULTIMATE QUOTE BUNDLE.pdf'}">Download PDF</a>
+            </div>
           `;
+
           results.appendChild(card);
         });
 
-      }catch(err){
+      } catch (e){
+        console.error(e);
         status.textContent = "Error fetching orders.";
-        console.error(err);
       }
-    }
-  </script>
+    });
 
+    emailInput.addEventListener('keyup', e => {
+      if (e.key === "Enter") trackBtn.click();
+    });
+  </script>
 </body>
 </html>
