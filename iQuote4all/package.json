@@ -13,11 +13,11 @@
     "body-parser": "^1.20.2",
     "dotenv": "^16.3.1",
     "cors": "^2.8.5",
-    "nodemailer": "^6.9.8"
+    "nodemailer": "^6.9.4"
   },
   "engines": {
     "node": "20.x"
   },
-  "author": "Your Name",
+  "author": "You",
   "license": "MIT"
 }
