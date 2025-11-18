@@ -27,7 +27,7 @@ const db = admin.firestore();
 
 // ---------- Config (from env) ----------
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
-const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || null; // safe to expose
+const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || null;
 const PAYSTACK_BASE = 'https://api.paystack.co';
 
 const USD_PRICE = Number(process.env.USD_PRICE || '15.99');
@@ -36,8 +36,7 @@ const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
 const PDF_FILE_PATH = (process.env.PDF_FILE_PATH || 'files/THE ULTIMATE QUOTE BUNDLE.pdf').replace(/^\//, '');
 const PUBLIC_PDF_URL = PUBLIC_URL ? `${PUBLIC_URL}/${PDF_FILE_PATH}` : `/${PDF_FILE_PATH}`;
 
-// Note: EmailJS keys are intentionally NOT required on server for the client-side approach.
-// If you prefer server-side sending, you can keep EMAILJS_* env vars and implement server side calls.
+// EmailJS public bits (these are safe to expose client-side)
 const EMAILJS_SERVICE_ID = process.env.EMAILJS_SERVICE_ID || null;
 const EMAILJS_TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || null;
 const EMAILJS_PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || null;
@@ -78,7 +77,6 @@ app.get('/config', (req, res) => {
     paystackPublicKey: PAYSTACK_PUBLIC_KEY || null,
     publicPdfUrl: PUBLIC_PDF_URL || null,
     usdPrice: USD_PRICE,
-    // reveal emailjs bits only if you want server to provide them; we keep null by default
     emailjs: {
       publicKey: EMAILJS_PUBLIC_KEY || null,
       serviceId: EMAILJS_SERVICE_ID || null,
@@ -202,7 +200,12 @@ app.post('/api/verify', async (req, res) => {
         amount: ngnAmountPaid,
         currency: tx.currency,
         download_link: PUBLIC_PDF_URL,
-        book_name: 'THE ULTIMATE QUOTE BUNDLE'
+        book_name: 'THE ULTIMATE QUOTE BUNDLE',
+        emailjs: {
+          publicKey: EMAILJS_PUBLIC_KEY || null,
+          serviceId: EMAILJS_SERVICE_ID || null,
+          templateId: EMAILJS_TEMPLATE_ID || null
+        }
       }
     });
 
