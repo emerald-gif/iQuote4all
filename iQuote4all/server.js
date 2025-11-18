@@ -191,45 +191,51 @@ app.post('/api/verify', async (req, res) => {
     }, { merge: true });
 
     // Send email via EmailJS REST (if configured)
-    if (EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && EMAILJS_PUBLIC_KEY && userEmail) {
-      try {
-        const emailPayload = {
-          service_id: EMAILJS_SERVICE_ID,
-          template_id: EMAILJS_TEMPLATE_ID,
-          public_key: EMAILJS_PUBLIC_KEY,
-          template_params: {
-            to_email: userEmail,
-            book_name: 'THE ULTIMATE QUOTE BUNDLE',
-            download_link: PUBLIC_PDF_URL,
-            reference: tx.reference
-          }
-        };
-
-        const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(emailPayload)
-        });
-
-        if (!emailRes.ok) {
-          console.warn('EmailJS responded non-OK:', await emailRes.text());
-        } else {
-          console.log('EmailJS send ok ->', userEmail);
-        }
-      } catch (e) {
-        console.warn('EmailJS send failed:', e.message || e);
+// ---------- REPLACE existing EmailJS send block with this (paste into /api/verify) ----------
+if (EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && EMAILJS_PUBLIC_KEY && userEmail) {
+  try {
+    const emailPayload = {
+      service_id: EMAILJS_SERVICE_ID,
+      template_id: EMAILJS_TEMPLATE_ID,
+      public_key: EMAILJS_PUBLIC_KEY,          // correct field name for REST call
+      template_params: {
+        to_email: userEmail,
+        book_name: 'THE ULTIMATE QUOTE BUNDLE',
+        download_link: PUBLIC_PDF_URL,
+        reference: tx.reference
       }
+    };
+
+    // DEBUG: log the payload before sending (safe — it does not include your secret)
+    console.log('📨 EmailJS payload:', JSON.stringify(emailPayload, null, 2));
+
+    const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(emailPayload)
+    });
+
+    const text = await emailRes.text().catch(() => null);
+    console.log('📬 EmailJS status:', emailRes.status, 'body:', text);
+
+    if (!emailRes.ok) {
+      // EmailJS returned non-200: log and include their response for debugging
+      console.error('❌ EmailJS error response:', {
+        status: emailRes.status,
+        body: text
+      });
+      // Optional: forward the EmailJS error to the client (for testing only)
+      // return res.status(502).json({ error: 'EmailJS error', details: text });
     } else {
-      console.warn('EmailJS not configured or missing purchaser email - skipping email send.');
+      console.log('✅ EmailJS send OK ->', userEmail);
     }
-
-    return res.json({ status: 'success' });
-
-  } catch (err) {
-    console.error('Verify payment error:', err);
-    return res.status(500).json({ error: err.message });
+  } catch (e) {
+    console.error('❌ EmailJS send failed (exception):', e && e.message ? e.message : e);
   }
-});
+} else {
+  console.warn('⚠️ EmailJS not configured or no purchaser email; skipping email send. Values:',
+    { EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, EMAILJS_PUBLIC_KEY, userEmail });
+}
 
 // Transactions listing
 app.get('/api/transactions', async (req, res) => {
