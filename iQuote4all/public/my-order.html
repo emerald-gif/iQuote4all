@@ -4,103 +4,245 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>My Orders — Track</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
   <style>
-    :root{--primary:#6c5ce7;--bg:#f4f6fb;--muted:#6b7280}
-    *{box-sizing:border-box;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-    body{background:linear-gradient(180deg,#f7f9ff,#f3f6fb);margin:0;padding:24px;color:#0f172a}
-    .container{max-width:980px;margin:0 auto}
-    header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
-    header h1{font-size:1.25rem;color:var(--primary);margin:0}
-    .track-panel{background:#fff;padding:18px;border-radius:14px;box-shadow:0 10px 30px rgba(12,18,35,0.06);display:flex;gap:12px;align-items:center}
-    .track-panel input{flex:1;padding:12px;border-radius:10px;border:1px solid #e6e9f2;font-size:1rem}
-    .btn{padding:10px 14px;border-radius:10px;border:none;font-weight:700;cursor:pointer}
-    .btn--primary{background:linear-gradient(90deg,var(--primary),#06b6d4);color:#fff}
-    .results{margin-top:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
-    .order-card{background:linear-gradient(180deg,#fff,#fbfdff);padding:16px;border-radius:12px;border:1px solid rgba(12,18,35,0.04);box-shadow:0 8px 26px rgba(12,18,35,0.06)}
-    .order-card h3{margin:0 0 8px 0;font-size:1rem}
-    .meta{font-size:0.92rem;color:var(--muted);margin-bottom:8px}
-    .pill{display:inline-block;padding:6px 8px;border-radius:999px;background:#eef2ff;color:var(--primary);font-weight:700;font-size:0.85rem}
-    .actions{display:flex;gap:8px;margin-top:12px}
-    .download{background:#0f172a;color:#fff;padding:10px 12px;border-radius:10px;text-decoration:none;font-weight:700}
-    .small{font-size:0.85rem;color:var(--muted)}
-    .empty{padding:28px;text-align:center;color:var(--muted)}
+    :root {
+      --primary: #6c5ce7;
+      --secondary: #06b6d4;
+      --bg: #f5f7ff;
+      --muted: #6b7280;
+      --card-bg: rgba(255,255,255,0.55);
+    }
+
+    * { box-sizing: border-box; font-family: Inter, sans-serif; }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      background: linear-gradient(180deg, #eef2ff, #f7f9ff);
+      color: #0f172a;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.55rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    header .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    /* ⭐ Track Input Panel */
+    .track-panel {
+      margin-top: 22px;
+      background: rgba(255,255,255,0.45);
+      backdrop-filter: blur(14px);
+      padding: 18px;
+      border-radius: 16px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.06);
+      display: flex;
+      gap: 12px;
+    }
+
+    .track-panel input {
+      flex: 1;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: rgba(255,255,255,0.75);
+      font-size: 1rem;
+    }
+
+    .btn {
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      min-width: 120px;
+    }
+
+    .btn--primary {
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      color: #fff;
+      box-shadow: 0 10px 30px rgba(108,92,231,0.4);
+    }
+
+    /* ⭐ Search Status */
+    #status {
+      margin-top: 14px;
+      font-size: 0.95rem;
+      color: var(--muted);
+      min-height: 20px;
+    }
+
+    /* ⭐ Results Grid */
+    .results {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit,minmax(300px,1fr));
+      gap: 18px;
+    }
+
+    /* ⭐ Order Card (Glass UI) */
+    .order-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(14px);
+      padding: 20px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.25);
+      box-shadow: 0 20px 45px rgba(0,0,0,0.08);
+      animation: fadeIn 0.45s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .order-card h3 {
+      margin: 0 0 6px 0;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .meta {
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .pill {
+      display: inline-block;
+      background: #eef2ff;
+      color: var(--primary);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    .actions {
+      margin-top: 16px;
+    }
+
+    .download {
+      display: inline-block;
+      background: #0f172a;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .empty {
+      padding: 26px;
+      text-align: center;
+      color: var(--muted);
+      background: rgba(255,255,255,0.45);
+      border-radius: 14px;
+      backdrop-filter: blur(10px);
+    }
+
+    /* Mobile Improvements */
+    @media (max-width: 480px) {
+      body { padding: 16px; }
+      .track-panel { padding: 16px; flex-direction: column; }
+      .btn--primary { width: 100%; }
+    }
   </style>
 </head>
+
 <body>
-  <div class="container">
-    <header>
-      <h1>Track your order</h1>
-      <div class="small">Enter the email used for the purchase — you will see all orders linked to that email.</div>
-    </header>
+<div class="container">
+  <header>
+    <h1>Track Your Order</h1>
+    <div class="sub">Enter the email used for purchase to view all your orders & downloads.</div>
+  </header>
 
-    <div class="track-panel">
-      <input id="emailInput" type="email" placeholder="you@example.com" />
-      <button id="trackBtn" class="btn btn--primary">Track order</button>
-    </div>
-
-    <div id="status" class="small" style="margin-top:10px"></div>
-
-    <div id="results" class="results"></div>
+  <div class="track-panel">
+    <input id="emailInput" type="email" placeholder="you@example.com">
+    <button id="trackBtn" class="btn btn--primary">Track Order</button>
   </div>
 
-  <script>
-    const status = document.getElementById('status');
-    const results = document.getElementById('results');
-    const trackBtn = document.getElementById('trackBtn');
-    const emailInput = document.getElementById('emailInput');
+  <div id="status"></div>
+  <div id="results" class="results"></div>
+</div>
 
-    trackBtn.addEventListener('click', async () => {
-      const email = (emailInput.value || '').trim().toLowerCase();
-      results.innerHTML = '';
-      status.textContent = '';
-      if (!email) { status.textContent = 'Please enter an email.'; return; }
+<script>
+const status = document.getElementById('status');
+const results = document.getElementById('results');
+const btn = document.getElementById('trackBtn');
+const input = document.getElementById('emailInput');
 
-      status.textContent = 'Searching...';
-      try {
-        const resp = await fetch('/api/orders?email=' + encodeURIComponent(email));
-        const json = await resp.json();
-        if (!resp.ok) throw new Error(json.error || 'Failed to fetch orders');
+btn.onclick = async () => {
+  const email = input.value.trim().toLowerCase();
+  results.innerHTML = "";
+  status.textContent = "";
 
-        if ((json.count || 0) === 0) {
-          status.textContent = 'No orders found for that email.';
-          results.innerHTML = '<div class="empty">No orders found. Make sure you used the same email when buying.</div>';
-          return;
-        }
+  if (!email) {
+    status.textContent = "Please enter an email.";
+    return;
+  }
 
-        status.textContent = `Found ${json.count} order(s).`;
+  status.textContent = "Searching…";
 
-        json.rows.forEach(order => {
-          const card = document.createElement('article');
-          card.className = 'order-card';
+  try {
+    const res = await fetch("/api/orders?email=" + encodeURIComponent(email));
+    const data = await res.json();
 
-          // show price always as 15.99
-          const priceStr = '15.99';
+    if (!res.ok) throw new Error(data.error || "Failed");
 
-          card.innerHTML = `
-            <h3>Reference: ${order.reference || order.id}</h3>
-            <div class="meta">Channel: <strong>${order.paystack?.channel || '—'}</strong> • Date: ${order.paidAt ? new Date(order.paidAt._seconds * 1000).toLocaleString() : ''}</div>
-            <div>Amount: <span class="pill">$${priceStr}</span></div>
-            <div style="margin-top:8px">Ref ID: <code>${order.reference || order.id}</code></div>
-            <div class="actions">
-              <a class="download" href="${order.pdfUrl || '/files/THE ULTIMATE QUOTE BUNDLE.pdf'}" target="_blank" rel="noopener">Download PDF</a>
-            </div>
-          `;
+    if (!data.count) {
+      status.textContent = "No orders found.";
+      results.innerHTML = `<div class="empty">No orders found for that email.</div>`;
+      return;
+    }
 
-          results.appendChild(card);
-        });
+    status.textContent = `Found ${data.count} order(s).`;
 
-        // add barrier / separation if more than 1 order — visually they're cards; you can further style
-        // (cards already visually separated in grid)
+    data.rows.forEach(order => {
+      const card = document.createElement("div");
+      card.className = "order-card";
 
-      } catch (e) {
-        console.error(e);
-        status.textContent = 'Failed to fetch orders. Check console.';
-      }
+      card.innerHTML = `
+        <h3>Order Ref: ${order.reference || order.id}</h3>
+        <div class="meta">
+          Channel: <strong>${order.paystack?.channel || "—"}</strong> •  
+          Date: ${order.paidAt ? new Date(order.paidAt._seconds * 1000).toLocaleString() : ""}
+        </div>
+        <div>Amount: <span class="pill">$15.99</span></div>
+        <div style="margin-top:12px">Ref ID: <code>${order.reference}</code></div>
+
+        <div class="actions">
+          <a class="download" href="${order.pdfUrl || '/files/THE ULTIMATE QUOTE BUNDLE.pdf'}" target="_blank">Download PDF</a>
+        </div>
+      `;
+
+      results.appendChild(card);
     });
 
-    // Allow pressing enter in input to trigger search
-    emailInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') trackBtn.click(); });
-  </script>
+  } catch (err) {
+    console.error(err);
+    status.textContent = "Something went wrong. Try again.";
+  }
+};
+
+input.addEventListener("keyup", e => { if (e.key === "Enter") btn.click(); });
+</script>
+
 </body>
-</ht
+</html>
