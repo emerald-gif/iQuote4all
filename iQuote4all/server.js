@@ -5,14 +5,14 @@ const fetch = require('node-fetch');
 const admin = require('firebase-admin');
 const bodyParser = require('body-parser');
 const path = require('path');
+const cors = require('cors');
 
 const app = express();
-
-// Middleware
+app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-// Firebase Admin init
+// ---------- Firebase Admin init ----------
 let serviceAccount = {};
 try {
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '{}');
@@ -25,17 +25,19 @@ try {
 }
 const db = admin.firestore();
 
-// Config (from env)
+// ---------- Config (from env) ----------
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || null; // safe to expose
 const PAYSTACK_BASE = 'https://api.paystack.co';
 
 const USD_PRICE = Number(process.env.USD_PRICE || '15.99');
 
-const PUBLIC_URL = process.env.PUBLIC_URL || '';
-const PDF_FILE_PATH = process.env.PDF_FILE_PATH || 'files/THE ULTIMATE QUOTE BUNDLE.pdf';
-const PUBLIC_PDF_URL = `${PUBLIC_URL.replace(/\/$/, '')}/${PDF_FILE_PATH.replace(/^\//, '')}`;
+const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
+const PDF_FILE_PATH = (process.env.PDF_FILE_PATH || 'files/THE ULTIMATE QUOTE BUNDLE.pdf').replace(/^\//, '');
+const PUBLIC_PDF_URL = PUBLIC_URL ? `${PUBLIC_URL}/${PDF_FILE_PATH}` : `/${PDF_FILE_PATH}`;
 
+// Note: EmailJS keys are intentionally NOT required on server for the client-side approach.
+// If you prefer server-side sending, you can keep EMAILJS_* env vars and implement server side calls.
 const EMAILJS_SERVICE_ID = process.env.EMAILJS_SERVICE_ID || null;
 const EMAILJS_TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || null;
 const EMAILJS_PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || null;
@@ -45,11 +47,10 @@ function toKobo(amount) {
   return Math.round(Number(amount) * 100);
 }
 
-// Best-effort: try extracting merchant FX rate from a tiny Paystack initialize call
+// Best-effort: get fx merchant_rate from Paystack initialize response (non-fatal)
 async function getExchangeRateFromPaystack() {
   if (!PAYSTACK_SECRET_KEY) return Number(process.env.FX_FALLBACK || 1500);
   try {
-    // small init to get fx info — harmless and quick
     const res = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
       method: 'POST',
       headers: {
@@ -58,7 +59,7 @@ async function getExchangeRateFromPaystack() {
       },
       body: JSON.stringify({
         email: 'fx-check@example.com',
-        amount: 100, // kobo
+        amount: 100,
         currency: 'NGN'
       })
     });
@@ -66,32 +67,36 @@ async function getExchangeRateFromPaystack() {
     const rate = j?.data?.fees_breakdown?.[0]?.fx?.merchant_rate;
     if (rate && !Number.isNaN(Number(rate))) return Number(rate);
   } catch (e) {
-    console.warn('FX fetch error:', e.message || e);
+    console.warn('FX fetch error (ignored):', e.message || e);
   }
   return Number(process.env.FX_FALLBACK || 1500);
 }
 
-// Public config route for client to fetch public key & pdf url
+// ---------- /config - public info for client ----------
 app.get('/config', (req, res) => {
-  return res.json({
+  res.json({
     paystackPublicKey: PAYSTACK_PUBLIC_KEY || null,
     publicPdfUrl: PUBLIC_PDF_URL || null,
-    usdPrice: USD_PRICE
+    usdPrice: USD_PRICE,
+    // reveal emailjs bits only if you want server to provide them; we keep null by default
+    emailjs: {
+      publicKey: EMAILJS_PUBLIC_KEY || null,
+      serviceId: EMAILJS_SERVICE_ID || null,
+      templateId: EMAILJS_TEMPLATE_ID || null
+    }
   });
 });
 
-// 1) Initialize payment: server calculates NGN amount (from USD_PRICE) and initializes Paystack
+// ---------- /api/pay - initialize Paystack transaction ----------
 app.post('/api/pay', async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email required' });
     if (!PAYSTACK_SECRET_KEY) return res.status(500).json({ error: 'Server misconfigured: missing Paystack secret key' });
 
-    // get FX rate and compute NGN amount (integer)
     const fxRate = await getExchangeRateFromPaystack();
-    const ngnAmount = Math.round(USD_PRICE * fxRate); // integer NGN
+    const ngnAmount = Math.round(USD_PRICE * fxRate);
 
-    // Initialize Paystack transaction
     const initResp = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
       method: 'POST',
       headers: {
@@ -112,13 +117,12 @@ app.post('/api/pay', async (req, res) => {
     });
 
     const initJson = await initResp.json();
-
     if (!initJson || initJson.status === false) {
       const msg = initJson?.message || 'Paystack initialize failed';
       return res.status(400).json({ error: msg, details: initJson });
     }
 
-    // Save initial transaction doc (non-fatal)
+    // Save an "initialized" transaction doc (non-fatal)
     try {
       await db.collection('transactions').doc(initJson.data.reference).set({
         reference: initJson.data.reference,
@@ -129,13 +133,13 @@ app.post('/api/pay', async (req, res) => {
         createdAt: admin.firestore.Timestamp.now()
       });
     } catch (e) {
-      console.warn('Failed to write init transaction:', e.message || e);
+      console.warn('Failed to write init transaction (ignored):', e.message || e);
     }
 
     return res.json({
       authorization_url: initJson.data.authorization_url,
       reference: initJson.data.reference,
-      amount: ngnAmount // integer NGN (client can use)
+      amount: ngnAmount // integer NGN
     });
   } catch (err) {
     console.error('Init payment error:', err);
@@ -143,7 +147,7 @@ app.post('/api/pay', async (req, res) => {
   }
 });
 
-// 2) Verify payment: server verifies with Paystack and saves to Firestore + sends email via EmailJS (if configured)
+// ---------- /api/verify - verify Paystack payment and save to Firestore ----------
 app.post('/api/verify', async (req, res) => {
   try {
     const { reference, purchaserEmail } = req.body;
@@ -154,7 +158,6 @@ app.post('/api/verify', async (req, res) => {
       method: 'GET',
       headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` }
     });
-
     const verifyJson = await verifyResp.json();
 
     if (!verifyJson || verifyJson.status !== true) {
@@ -178,10 +181,10 @@ app.post('/api/verify', async (req, res) => {
       paidAt: admin.firestore.Timestamp.now()
     };
 
-    // Save order
+    // Save to "my order"
     await db.collection('my order').add(record);
 
-    // Update transactions document (merge)
+    // Update transactions doc (merge)
     await db.collection('transactions').doc(tx.reference).set({
       reference: tx.reference,
       email: userEmail,
@@ -190,73 +193,29 @@ app.post('/api/verify', async (req, res) => {
       paidAt: admin.firestore.Timestamp.now()
     }, { merge: true });
 
-// Send email via EmailJS REST (if configured)
-    if (EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && EMAILJS_PUBLIC_KEY && userEmail) {
-      try {
-        const emailPayload = {
-          service_id: EMAILJS_SERVICE_ID,
-          template_id: EMAILJS_TEMPLATE_ID,
-          public_key: EMAILJS_PUBLIC_KEY,
-          template_params: {
-            to_email: userEmail,
-            book_name: 'THE ULTIMATE QUOTE BUNDLE',
-            download_link: PUBLIC_PDF_URL,
-            reference: tx.reference
-          }
-        };
-
-        console.log('📨 EmailJS payload:', JSON.stringify(emailPayload, null, 2));
-
-        const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(emailPayload)
-        });
-
-        const text = await emailRes.text().catch(() => null);
-        console.log('📬 EmailJS status:', emailRes.status, 'body:', text);
-
-        if (!emailRes.ok) {
-          console.error('❌ EmailJS error response:', {
-            status: emailRes.status,
-            body: text
-          });
-        } else {
-          console.log('✅ EmailJS send OK ->', userEmail);
-        }
-      } catch (e) {
-        console.error('❌ EmailJS send failed:', e.message || e);
+    // Return full useful info to client -> client will send EmailJS
+    return res.json({
+      status: 'success',
+      data: {
+        reference: tx.reference,
+        email: userEmail,
+        amount: ngnAmountPaid,
+        currency: tx.currency,
+        download_link: PUBLIC_PDF_URL,
+        book_name: 'THE ULTIMATE QUOTE BUNDLE'
       }
-    } else {
-      console.warn('⚠️ EmailJS not configured or missing purchaser email', {
-        EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID,
-        EMAILJS_PUBLIC_KEY,
-        userEmail
-      });
-    }
-
-    // respond success
-    return res.json({ status: 'success', data: record });
+    });
 
   } catch (err) {
     console.error('Verify error:', err);
     return res.status(500).json({ error: err.message });
   }
-}); // ✅ CLOSES /api/verify route properly
+});
 
-
-
-// -------------------------------------------------------------
-//  LIST TRANSACTIONS (NOW OUTSIDE /api/verify ROUTE)
-// -------------------------------------------------------------
+// ---------- Transactions listing ----------
 app.get('/api/transactions', async (req, res) => {
   try {
-    const snap = await db.collection('transactions')
-      .orderBy('createdAt', 'desc')
-      .limit(50)
-      .get();
-
+    const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(50).get();
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     return res.json(rows);
   } catch (e) {
@@ -265,17 +224,10 @@ app.get('/api/transactions', async (req, res) => {
   }
 });
 
-
-// -------------------------------------------------------------
-// SPA FALLBACK + SERVER START
-// -------------------------------------------------------------
+// ---------- SPA fallback + start ----------
 app.get('*', (req, res) => {
   res.sendFile(path.resolve(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log(`Server running on ${PORT} (PUBLIC_URL=${PUBLIC_URL})`)
-);
-      
-
+app.listen(PORT, () => console.log(`Server running on ${PORT} (PUBLIC_URL=${PUBLIC_URL})`));
