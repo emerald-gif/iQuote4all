@@ -13,9 +13,10 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// runtime config (will be filled by fetch /config)
+// runtime config (fetched from /config)
 let PAYSTACK_PUBLIC_KEY = null;
 let PUBLIC_PDF_URL = null;
+let USD_PRICE = 15.99;
 let PAYSTACK_READY = false;
 
 // load config and Paystack inline script
@@ -25,10 +26,7 @@ async function initConfigAndPaystack() {
     const cfg = await res.json();
     PAYSTACK_PUBLIC_KEY = cfg.paystackPublicKey || null;
     PUBLIC_PDF_URL = cfg.publicPdfUrl || null;
-
-    if (!PAYSTACK_PUBLIC_KEY) {
-      console.warn('Paystack public key not provided by server (/config). Set env PAYSTACK_PUBLIC_KEY.');
-    }
+    USD_PRICE = cfg.usdPrice || USD_PRICE;
 
     // inject Paystack inline script if not already present
     if (!window.PaystackPop) {
@@ -48,8 +46,6 @@ async function initConfigAndPaystack() {
     console.warn('Failed to init config or Paystack script:', err);
   }
 }
-
-// immediately start config init
 initConfigAndPaystack();
 
 // UI helpers
@@ -97,7 +93,7 @@ function openCheckoutModal() {
 function closeCheckoutModal() { modalBackdrop.style.display = 'none'; }
 if (modalBackdrop) { modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeCheckoutModal(); }); }
 
-// Proceed to payment (DROP-IN fixed & uses server-side public key)
+// Proceed to payment (stable inline)
 async function proceedToPayment() {
   const emailInput = document.getElementById('buyerEmail');
   const nameInput = document.getElementById('buyerName');
@@ -114,7 +110,7 @@ async function proceedToPayment() {
   proceedBtn.textContent = 'Preparing...';
 
   try {
-    // 1) initialize on server
+    // 1) call server to initialize
     const resp = await fetch('/api/pay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -123,25 +119,21 @@ async function proceedToPayment() {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || 'Failed to initialize payment.');
 
-    const { reference, amount } = data; // amount = NGN integer returned by server
+    const { reference, amount } = data; // amount = integer NGN returned by server
     if (!reference) throw new Error('Payment reference missing from server response.');
 
-    // wait for Paystack script + config to be ready (max ~5s)
+    // wait a short time for Paystack script if needed
     const timeoutAt = Date.now() + 5000;
     while (!PAYSTACK_READY && Date.now() < timeoutAt) {
       await new Promise(r => setTimeout(r, 100));
     }
 
-    if (!PAYSTACK_READY) throw new Error('Paystack script not ready. Try again.');
+    if (!PAYSTACK_READY) throw new Error('Paystack not ready. Try reloading the page.');
 
     if (!window.PaystackPop) throw new Error('Paystack inline script not loaded.');
-    if (!PAYSTACK_PUBLIC_KEY) {
-      // also accept window.PAYSTACK_PUBLIC_KEY if someone set it in page
-      PAYSTACK_PUBLIC_KEY = window.PAYSTACK_PUBLIC_KEY || PAYSTACK_PUBLIC_KEY;
-    }
-    if (!PAYSTACK_PUBLIC_KEY) throw new Error('Paystack public key not set on server (check /config).');
+    if (!PAYSTACK_PUBLIC_KEY) throw new Error('Paystack public key not provided by server (/config).');
 
-    // Setup inline with a regular function for callback
+    // Setup Paystack inline — callback is a plain function (not async) to satisfy inline
     const handler = PaystackPop.setup({
       key: PAYSTACK_PUBLIC_KEY,
       email: email,
@@ -149,12 +141,10 @@ async function proceedToPayment() {
       currency: 'NGN',
       ref: reference,
       metadata: {
-        custom_fields: [
-          { display_name: 'Buyer name', variable_name: 'buyer_name', value: name || '' }
-        ]
+        custom_fields: [{ display_name: 'Buyer name', variable_name: 'buyer_name', value: name || '' }]
       },
       callback: function (response) {
-        // call verifyPayment (async) from here
+        // call server verify; don't make this callback async function (Paystack expects normal function)
         verifyPayment(response.reference, email)
           .catch(err => {
             console.error('Verification error:', err);
@@ -168,7 +158,9 @@ async function proceedToPayment() {
       }
     });
 
+    // open inline iframe (stays on same domain)
     handler.openIframe();
+
   } catch (err) {
     console.error('proceedToPayment error:', err);
     alert(err.message || 'Payment failed to start.');
@@ -177,7 +169,7 @@ async function proceedToPayment() {
   }
 }
 
-// Verify payment (calls your server)
+// Verify payment (server-side)
 async function verifyPayment(reference, purchaserEmail) {
   try {
     const res = await fetch('/api/verify', {
