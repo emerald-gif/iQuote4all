@@ -196,7 +196,7 @@ app.post('/api/verify', async (req, res) => {
         const emailPayload = {
           service_id: EMAILJS_SERVICE_ID,
           template_id: EMAILJS_TEMPLATE_ID,
-          user_id: EMAILJS_PUBLIC_KEY,
+          public_key: EMAILJS_PUBLIC_KEY,
           template_params: {
             to_email: userEmail,
             book_name: 'THE ULTIMATE QUOTE BUNDLE',
