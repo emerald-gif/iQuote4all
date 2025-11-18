@@ -13,14 +13,24 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+// -----------------------
+// CLIENT-SIDE CONFIG
+// -----------------------
+
+// YOUR EmailJS client keys (placed directly in client as requested)
+// NOTE: This is less secure (public key visible to user). Works fine for test mode & quick flow.
+const EMAILJS_PUBLIC_KEY = "0OK3wHLwcQC2wm6MZ";
+const EMAILJS_SERVICE_ID = "service_ehmelnw";
+const EMAILJS_TEMPLATE_ID = "template_jyuafkt";
+
 // runtime config (fetched from /config)
 let PAYSTACK_PUBLIC_KEY = null;
 let PUBLIC_PDF_URL = null;
 let USD_PRICE = 15.99;
 let PAYSTACK_READY = false;
 
-// load config and Paystack inline script
-async function initConfigAndPaystack() {
+// load config and ensure Paystack & EmailJS are initialized
+async function initConfigAndSdks() {
   try {
     const res = await fetch('/config');
     const cfg = await res.json();
@@ -28,36 +38,72 @@ async function initConfigAndPaystack() {
     PUBLIC_PDF_URL = cfg.publicPdfUrl || null;
     USD_PRICE = cfg.usdPrice || USD_PRICE;
 
-    // inject Paystack inline script if not already present
+    // Load EmailJS SDK if not already loaded (optional - recommended to include via <script>)
+    if (!window.emailjs) {
+      // try dynamic inject (if you didn't include the script tag)
+      try {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.emailjs.com/sdk/3.2/email.min.js';
+          s.async = true;
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error('Failed to load EmailJS SDK'));
+          document.head.appendChild(s);
+        });
+      } catch (e) {
+        console.warn('EmailJS SDK not available:', e);
+      }
+    }
+
+    // Initialize EmailJS client with PUBLIC KEY
+    if (window.emailjs) {
+      try {
+        emailjs.init(EMAILJS_PUBLIC_KEY);
+        console.log('EmailJS initialized (client-side).');
+      } catch (e) {
+        console.warn('EmailJS init failed:', e);
+      }
+    } else {
+      console.warn('EmailJS not loaded. Email sending will not work until SDK is included.');
+    }
+
+    // Load Paystack inline if not present (recommended to include script tag instead)
     if (!window.PaystackPop) {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = 'https://js.paystack.co/v1/inline.js';
-        s.async = true;
-        s.onload = () => resolve();
-        s.onerror = () => reject(new Error('Failed to load Paystack inline script'));
-        document.head.appendChild(s);
-      });
+      try {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://js.paystack.co/v1/inline.js';
+          s.async = true;
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error('Failed to load Paystack inline script'));
+          document.head.appendChild(s);
+        });
+      } catch (e) {
+        console.warn('Failed to load Paystack inline script:', e);
+      }
     }
 
     PAYSTACK_READY = true;
-    console.log('Paystack ready, public key loaded:', PAYSTACK_PUBLIC_KEY ? 'YES' : 'NO');
+    console.log('Init finished. PAYSTACK_PUBLIC_KEY present:', !!PAYSTACK_PUBLIC_KEY, 'PUBLIC_PDF_URL:', !!PUBLIC_PDF_URL);
+
   } catch (err) {
-    console.warn('Failed to init config or Paystack script:', err);
+    console.warn('Failed to init config or SDKs:', err);
   }
 }
-initConfigAndPaystack();
+initConfigAndSdks();
 
-// UI helpers
+// -----------------------
+// UI helpers & carousel (unchanged)
+// -----------------------
 function toggleSidebar() {
   const sidebar = document.getElementById("sidebar");
+  if (!sidebar) return;
   sidebar.style.left = sidebar.style.left === "0px" ? "-280px" : "0px";
 }
 function showReview() { window.location.href = "/review.html"; }
 function followYoutube() { window.open("https://youtube.com/@iquote4all?si=pnSVWwSmgvO5VFNl"); }
 function openContact() { alert("Contact: iquote4all@gmail.com"); }
 
-// Quote carousel (optional)
 let quoteIndex = 0;
 const slides = document.querySelectorAll(".quote-slide");
 const dots = document.querySelectorAll(".dot");
@@ -70,7 +116,7 @@ function nextQuote() { if (!slides.length) return; quoteIndex = (quoteIndex + 1)
 function prevQuote() { if (!slides.length) return; quoteIndex = (quoteIndex - 1 + slides.length) % slides.length; showQuote(quoteIndex); }
 if (slides.length) { setInterval(nextQuote, 5000); showQuote(0); }
 
-// Transactions listing
+// Transactions listing (debug)
 async function showTransactions() {
   try {
     const res = await fetch('/api/transactions');
@@ -86,19 +132,21 @@ async function showTransactions() {
 // Checkout modal helpers
 const modalBackdrop = document.getElementById('modalBackdrop');
 function openCheckoutModal() {
-  document.getElementById('buyerEmail').value = '';
-  document.getElementById('buyerName').value = '';
-  modalBackdrop.style.display = 'flex';
+  const emailEl = document.getElementById('buyerEmail');
+  const nameEl = document.getElementById('buyerName');
+  if (emailEl) emailEl.value = '';
+  if (nameEl) nameEl.value = '';
+  if (modalBackdrop) modalBackdrop.style.display = 'flex';
 }
-function closeCheckoutModal() { modalBackdrop.style.display = 'none'; }
-if (modalBackdrop) { modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeCheckoutModal(); }); }
+function closeCheckoutModal() { if (modalBackdrop) modalBackdrop.style.display = 'none'; }
+if (modalBackdrop) modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeCheckoutModal(); });
 
-// Proceed to payment (stable inline)
+// ----------------- Payment flow (inline) -----------------
 async function proceedToPayment() {
   const emailInput = document.getElementById('buyerEmail');
   const nameInput = document.getElementById('buyerName');
-  const email = emailInput.value && emailInput.value.trim();
-  const name = nameInput.value && nameInput.value.trim();
+  const email = emailInput?.value?.trim();
+  const name = nameInput?.value?.trim();
 
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
     alert('Please enter a valid email address.');
@@ -106,34 +154,35 @@ async function proceedToPayment() {
   }
 
   const proceedBtn = document.querySelector('.modal .buy-btn');
-  proceedBtn.disabled = true;
-  proceedBtn.textContent = 'Preparing...';
+  if (proceedBtn) { proceedBtn.disabled = true; proceedBtn.textContent = 'Preparing...'; }
 
   try {
-    // 1) call server to initialize
+    // 1) init on server
     const resp = await fetch('/api/pay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email })
     });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || 'Failed to initialize payment.');
+    const init = await resp.json();
+    if (!resp.ok) throw new Error(init.error || 'Failed to initialize payment.');
 
-    const { reference, amount } = data; // amount = integer NGN returned by server
-    if (!reference) throw new Error('Payment reference missing from server response.');
+    const { reference, amount } = init;
+    if (!reference) throw new Error('No reference returned from server.');
 
-    // wait a short time for Paystack script if needed
+    // 2) ensure client SDKs loaded
     const timeoutAt = Date.now() + 5000;
     while (!PAYSTACK_READY && Date.now() < timeoutAt) {
       await new Promise(r => setTimeout(r, 100));
     }
+    if (!PAYSTACK_READY) throw new Error('Client SDKs not ready. Reload the page.');
 
-    if (!PAYSTACK_READY) throw new Error('Paystack not ready. Try reloading the page.');
+    if (!window.PaystackPop) throw new Error('Paystack inline script missing. Include https://js.paystack.co/v1/inline.js');
 
-    if (!window.PaystackPop) throw new Error('Paystack inline script not loaded.');
-    if (!PAYSTACK_PUBLIC_KEY) throw new Error('Paystack public key not provided by server (/config).');
+    // prefer server-provided public key if any; else fall back to window var
+    if (!PAYSTACK_PUBLIC_KEY) PAYSTACK_PUBLIC_KEY = window.PAYSTACK_PUBLIC_KEY || PAYSTACK_PUBLIC_KEY;
+    if (!PAYSTACK_PUBLIC_KEY) throw new Error('Paystack public key not configured on server (/config).');
 
-    // Setup Paystack inline — callback is a plain function (not async) to satisfy inline
+    // 3) Setup inline
     const handler = PaystackPop.setup({
       key: PAYSTACK_PUBLIC_KEY,
       email: email,
@@ -144,32 +193,82 @@ async function proceedToPayment() {
         custom_fields: [{ display_name: 'Buyer name', variable_name: 'buyer_name', value: name || '' }]
       },
       callback: function (response) {
-        // call server verify; don't make this callback async function (Paystack expects normal function)
-        verifyPayment(response.reference, email)
-          .catch(err => {
-            console.error('Verification error:', err);
-            alert('Payment succeeded but verification failed. Contact support.');
-          });
+        // Payment succeeded on Paystack side — now call our server to verify & record,
+        // then send EmailJS from the client.
+        (async () => {
+          try {
+            const verifyRes = await fetch('/api/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reference: response.reference, purchaserEmail: email })
+            });
+            const verifyJson = await verifyRes.json();
+            if (!verifyRes.ok) {
+              console.error('Server verify returned error:', verifyJson);
+              alert('Payment succeeded but server verify failed. Check console.');
+              if (proceedBtn) { proceedBtn.disabled = false; proceedBtn.textContent = 'Proceed to payment'; }
+              return;
+            }
+
+            if (verifyJson.status !== 'success') {
+              console.warn('verify response:', verifyJson);
+              alert('Payment not verified. Contact support.');
+              if (proceedBtn) { proceedBtn.disabled = false; proceedBtn.textContent = 'Proceed to payment'; }
+              return;
+            }
+
+            // verifyJson.data contains { reference, email, amount, currency, download_link, book_name }
+            const payload = verifyJson.data;
+
+            // 4) SEND EMAIL using EmailJS from client
+            if (window.emailjs && EMAILJS_PUBLIC_KEY && EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID) {
+              try {
+                const templateParams = {
+                  to_email: payload.email,
+                  book_name: payload.book_name,
+                  download_link: payload.download_link,
+                  reference: payload.reference
+                };
+
+                const sendResult = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+                console.log('EmailJS send result:', sendResult);
+                alert('Payment successful! Download link sent to your email.');
+              } catch (e) {
+                console.error('EmailJS send failed:', e);
+                alert('Payment verified but failed to send email. Check console for details.');
+              }
+            } else {
+              console.warn('EmailJS client not configured (SDK or keys missing).');
+              alert('Payment verified. But email sending is not configured.');
+            }
+
+            if (proceedBtn) { proceedBtn.disabled = false; proceedBtn.textContent = 'Proceed to payment'; }
+            window.location.href = '/';
+          } catch (e) {
+            console.error('Error in callback flow:', e);
+            alert('Verification or email step failed. Check console.');
+            if (proceedBtn) { proceedBtn.disabled = false; proceedBtn.textContent = 'Proceed to payment'; }
+          }
+        })();
       },
       onClose: function () {
-        proceedBtn.disabled = false;
-        proceedBtn.textContent = 'Proceed to payment';
+        if (proceedBtn) { proceedBtn.disabled = false; proceedBtn.textContent = 'Proceed to payment'; }
         alert('Payment window closed.');
       }
     });
 
-    // open inline iframe (stays on same domain)
+    // open inline on same page
     handler.openIframe();
 
   } catch (err) {
     console.error('proceedToPayment error:', err);
     alert(err.message || 'Payment failed to start.');
-    proceedBtn.disabled = false;
-    proceedBtn.textContent = 'Proceed to payment';
+    const proceedBtn = document.querySelector('.modal .buy-btn');
+    if (proceedBtn) { proceedBtn.disabled = false; proceedBtn.textContent = 'Proceed to payment'; }
   }
 }
 
-// Verify payment (server-side)
+// manual verify helper (if you need to call verify separately)
 async function verifyPayment(reference, purchaserEmail) {
   try {
     const res = await fetch('/api/verify', {
@@ -177,16 +276,9 @@ async function verifyPayment(reference, purchaserEmail) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reference, purchaserEmail })
     });
-    const data = await res.json();
-    if (res.ok && data.status === 'success') {
-      alert('Payment successful! The PDF will be emailed shortly.');
-      window.location.href = '/';
-    } else {
-      console.warn('Verify response:', data);
-      alert('Payment not verified. If money was deducted contact support.');
-    }
+    return await res.json();
   } catch (err) {
-    console.error(err);
-    alert('Verification failed. Contact support.');
+    console.error('verifyPayment error:', err);
+    throw err;
   }
 }
