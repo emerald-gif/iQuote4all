@@ -1,5 +1,6 @@
-// public/main.js
-// FIREBASE (unchanged)
+// public/main.js (updated)
+
+// FIREBASE (unchanged) - compat libs included in HTML
 const firebaseConfig = {
   apiKey: "AIzaSyB5amYVfN2M6e1uUHvNh1cIlVD_Fa5g8eQ",
   authDomain: "iquote4all.firebaseapp.com",
@@ -9,139 +10,183 @@ const firebaseConfig = {
   appId: "1:603028789594:web:b5b9cc5fc9b35e4512bb63",
   measurementId: "G-TPW4DTTQEF"
 };
-if (typeof firebase !== "undefined" && firebase.initializeApp) {
-  try { firebase.initializeApp(firebaseConfig); } catch (e) { /* already init */ }
-}
-const db = (typeof firebase !== "undefined" && firebase.firestore) ? firebase.firestore() : null;
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
-// runtime config loaded from server
+// runtime config (fetched from /config)
 let PAYSTACK_PUBLIC_KEY = null;
 let PUBLIC_PDF_URL = null;
 let USD_PRICE = 15.99;
-let CLIENT_READY = false;
+let PAYSTACK_READY = false;
 
-// load server config and Paystack inline
-async function initConfigAndLibs() {
+// load config and Paystack inline script
+async function initConfigAndPaystack() {
   try {
-    const r = await fetch('/config');
-    const cfg = await r.json();
-    PAYSTACK_PUBLIC_KEY = cfg.paystackPublicKey || PAYSTACK_PUBLIC_KEY;
-    PUBLIC_PDF_URL = cfg.publicPdfUrl || PUBLIC_PDF_URL;
+    const res = await fetch('/config');
+    const cfg = await res.json();
+    PAYSTACK_PUBLIC_KEY = cfg.paystackPublicKey || null;
+    PUBLIC_PDF_URL = cfg.publicPdfUrl || null;
     USD_PRICE = cfg.usdPrice || USD_PRICE;
 
-    // load Paystack inline if not present
+    // inject Paystack inline script if not already present
     if (!window.PaystackPop) {
       await new Promise((resolve, reject) => {
         const s = document.createElement('script');
         s.src = 'https://js.paystack.co/v1/inline.js';
         s.async = true;
         s.onload = () => resolve();
-        s.onerror = () => reject(new Error('Failed to load Paystack inline'));
+        s.onerror = () => reject(new Error('Failed to load Paystack inline script'));
         document.head.appendChild(s);
       });
     }
-    CLIENT_READY = true;
-    console.log('Client ready: paystack loaded, config:', { PAYSTACK_PUBLIC_KEY, PUBLIC_PDF_URL, USD_PRICE });
-  } catch (e) {
-    console.warn('initConfigAndLibs failed:', e);
-    CLIENT_READY = true; // allow user to try but it will error later
+
+    PAYSTACK_READY = true;
+    console.log('Paystack ready, public key loaded:', PAYSTACK_PUBLIC_KEY ? 'YES' : 'NO');
+  } catch (err) {
+    console.warn('Failed to init config or Paystack script:', err);
   }
 }
-initConfigAndLibs();
+initConfigAndPaystack();
 
-// modal helpers
+// UI helpers
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  sidebar.style.left = sidebar.style.left === '0px' ? '-280px' : '0px';
+}
+function showReview() { window.location.href = '/review.html'; }
+function followYoutube() { window.open('https://youtube.com/@iquote4all?si=pnSVWwSmgvO5VFNl'); }
+function openContact() { alert('Contact: iquote4all@gmail.com'); }
+
+// Redirect the old Transactions button to "My Order" page (we no longer fetch transactions client-side)
+function openMyOrders() { window.location.href = '/my-order.html'; }
+
+// Quote carousel (optional) -- unchanged
+let quoteIndex = 0;
+const slides = document.querySelectorAll('.quote-slide');
+const dots = document.querySelectorAll('.dot');
+function showQuote(index) {
+  if (!slides.length) return;
+  slides.forEach((slide, i) => slide.classList.toggle('active', i === index));
+  dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
+}
+function nextQuote() { if (!slides.length) return; quoteIndex = (quoteIndex + 1) % slides.length; showQuote(quoteIndex); }
+function prevQuote() { if (!slides.length) return; quoteIndex = (quoteIndex - 1 + slides.length) % slides.length; showQuote(quoteIndex); }
+if (slides.length) { setInterval(nextQuote, 5000); showQuote(0); }
+
+// Checkout modal helpers
 const modalBackdrop = document.getElementById('modalBackdrop');
 function openCheckoutModal() {
-  const e = document.getElementById('buyerEmail'); if (e) e.value = '';
-  const n = document.getElementById('buyerName'); if (n) n.value = '';
-  if (modalBackdrop) modalBackdrop.style.display = 'flex';
+  document.getElementById('buyerEmail').value = '';
+  document.getElementById('buyerName').value = '';
+  modalBackdrop.style.display = 'flex';
 }
-function closeCheckoutModal() { if (modalBackdrop) modalBackdrop.style.display = 'none'; }
-if (modalBackdrop) modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeCheckoutModal(); });
+function closeCheckoutModal() { modalBackdrop.style.display = 'none'; }
+if (modalBackdrop) { modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeCheckoutModal(); }); }
 
-// proceedToPayment: initialize server, open Paystack inline, then call server verify after success
+// Proceed to payment (stable inline)
 async function proceedToPayment() {
   const emailInput = document.getElementById('buyerEmail');
   const nameInput = document.getElementById('buyerName');
-  const buyBtn = document.querySelector('.modal .buy-btn');
+  const email = emailInput.value && emailInput.value.trim();
+  const name = nameInput.value && nameInput.value.trim();
 
-  const email = emailInput?.value?.trim();
-  const name = nameInput?.value?.trim();
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+    alert('Please enter a valid email address.');
+    return;
+  }
 
-  if (!email || !/^\S+@\S+\.\S+$/.test(email)) { alert('Please enter a valid email address.'); return; }
-  if (buyBtn) { buyBtn.disabled = true; buyBtn.textContent = 'Preparing...'; }
+  const proceedBtn = document.querySelector('.modal .buy-btn');
+  proceedBtn.disabled = true;
+  proceedBtn.textContent = 'Preparing...';
 
   try {
-    // wait briefly for libs
-    const timeoutAt = Date.now() + 7000;
-    while (!CLIENT_READY && Date.now() < timeoutAt) await new Promise(r => setTimeout(r, 100));
-    if (!CLIENT_READY) throw new Error('Client libs not ready. Reload the page.');
-
-    // 1) initialize on server (server returns reference and amount)
-    const initRes = await fetch('/api/pay', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email })
+    // 1) call server to initialize
+    const resp = await fetch('/api/pay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
     });
-    const initJson = await initRes.json();
-    if (!initRes.ok) throw new Error(initJson.error || 'Failed to initialize payment on server.');
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Failed to initialize payment.');
 
-    const { reference, amount } = initJson;
-    if (!reference) throw new Error('No payment reference from server.');
+    const { reference, amount } = data; // amount = integer NGN returned by server
+    if (!reference) throw new Error('Payment reference missing from server response.');
 
-    // 2) open Paystack inline
-    if (!window.PaystackPop) throw new Error('Paystack inline missing (load https://js.paystack.co/v1/inline.js).');
-    if (!PAYSTACK_PUBLIC_KEY) console.warn('Paystack public key missing from /config.');
+    // wait a short time for Paystack script if needed
+    const timeoutAt = Date.now() + 5000;
+    while (!PAYSTACK_READY && Date.now() < timeoutAt) {
+      await new Promise(r => setTimeout(r, 100));
+    }
 
+    if (!PAYSTACK_READY) throw new Error('Paystack not ready. Try reloading the page.');
+
+    if (!window.PaystackPop) throw new Error('Paystack inline script not loaded.');
+    if (!PAYSTACK_PUBLIC_KEY) throw new Error('Paystack public key not provided by server (/config).');
+
+    // Setup Paystack inline — callback is a plain function (not async) to satisfy inline
     const handler = PaystackPop.setup({
       key: PAYSTACK_PUBLIC_KEY,
-      email,
-      amount: Math.round(Number(amount) * 100), // convert NGN to kobo for paystack inline
+      email: email,
+      amount: Math.round(Number(amount) * 100), // NGN -> kobo
       currency: 'NGN',
       ref: reference,
       metadata: {
         custom_fields: [{ display_name: 'Buyer name', variable_name: 'buyer_name', value: name || '' }]
       },
       callback: function (response) {
-        // Payment succeeded on Paystack side -> verify on server which will send the email
-        (async () => {
-          try {
-            const verifyRes = await fetch('/api/verify', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ reference: response.reference, purchaserEmail: email })
-            });
-            const verifyJson = await verifyRes.json();
-            if (!verifyRes.ok || verifyJson.status !== 'success') {
-              console.error('Server verify failed:', verifyJson);
-              alert('Payment succeeded but verification failed on server. Check server logs.');
-              if (buyBtn) { buyBtn.disabled = false; buyBtn.textContent = 'Proceed to payment'; }
-              return;
-            }
-
-            // server attempted to send email. Show success to user.
-            alert('Payment successful — check your email for the download link.');
-            if (buyBtn) { buyBtn.disabled = false; buyBtn.textContent = 'Proceed to payment'; }
-            closeCheckoutModal();
-          } catch (e) {
-            console.error('Post-payment error:', e);
-            alert('Verification failed. Check server logs.');
-            if (buyBtn) { buyBtn.disabled = false; buyBtn.textContent = 'Proceed to payment'; }
-          }
-        })();
+        // call server verify; don't make this callback async function (Paystack expects normal function)
+        verifyPayment(response.reference, email)
+          .catch(err => {
+            console.error('Verification error:', err);
+            alert('Payment succeeded but verification failed. Contact support.');
+          });
       },
       onClose: function () {
-        if (buyBtn) { buyBtn.disabled = false; buyBtn.textContent = 'Proceed to payment'; }
+        proceedBtn.disabled = false;
+        proceedBtn.textContent = 'Proceed to payment';
         alert('Payment window closed.');
       }
     });
 
+    // open inline iframe (stays on same domain)
     handler.openIframe();
+
   } catch (err) {
     console.error('proceedToPayment error:', err);
-    alert(err.message || 'Failed to start payment.');
-    if (buyBtn) { buyBtn.disabled = false; buyBtn.textContent = 'Proceed to payment'; }
+    alert(err.message || 'Payment failed to start.');
+    proceedBtn.disabled = false;
+    proceedBtn.textContent = 'Proceed to payment';
   }
 }
 
-// expose to global if your html uses inline onClick
+// Verify payment (server-side)
+async function verifyPayment(reference, purchaserEmail) {
+  try {
+    const res = await fetch('/api/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reference, purchaserEmail })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      alert('Payment successful! The PDF will be emailed shortly.');
+      window.location.href = '/';
+    } else {
+      console.warn('Verify response:', data);
+      alert('Payment not verified. If money was deducted contact support.');
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Verification failed. Contact support.');
+  }
+}
+
+// Expose functions for inline HTML to call
+window.toggleSidebar = toggleSidebar;
+window.showReview = showReview;
+window.followYoutube = followYoutube;
+window.openContact = openContact;
+window.openMyOrders = openMyOrders;
 window.openCheckoutModal = openCheckoutModal;
 window.closeCheckoutModal = closeCheckoutModal;
 window.proceedToPayment = proceedToPayment;
