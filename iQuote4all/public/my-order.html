@@ -1,248 +1,217 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>My Orders — Track</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  
+  <title>My Orders — iQuote4all</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
   <style>
-    :root {
-      --primary: #6c5ce7;
-      --secondary: #06b6d4;
-      --bg: #f5f7ff;
-      --muted: #6b7280;
-      --card-bg: rgba(255,255,255,0.55);
+    :root{--primary:#6c5ce7;--bg:#f4f6fb;--muted:#6b7280}
+    *{box-sizing:border-box;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    body{background:linear-gradient(180deg,#f7f9ff,#f3f6fb);margin:0;color:#0f172a}
+
+    /* ===== TOP NAV ===== */
+    .topnav{
+      height:60px;
+      background:#ffffffee;
+      backdrop-filter:blur(6px);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:0 18px;
+      border-bottom:1px solid #e8ecf5;
+      position:sticky;
+      top:0;
+      z-index:50;
+    }
+    .logo{font-weight:700;font-size:1.2rem;color:var(--primary)}
+    .hamburger{font-size:26px;cursor:pointer;padding:6px}
+
+    /* ===== SIDEBAR ===== */
+    .sidebar{
+      width:260px;
+      background:#fff;
+      height:100vh;
+      position:fixed;
+      top:0;
+      left:-260px;
+      padding:20px;
+      transition:0.3s ease-in-out;
+      z-index:99;
+      box-shadow:4px 0 20px rgba(0,0,0,0.05);
+    }
+    .sidebar.open{left:0}
+    .sidebar ul{list-style:none;padding:0;margin-top:30px}
+    .sidebar li{
+      padding:14px 0;
+      border-bottom:1px solid #f1f3f8;
+      font-size:1.05rem;
+      cursor:pointer;
     }
 
-    * { box-sizing: border-box; font-family: Inter, sans-serif; }
+    /* ===== PAGE CONTENT ===== */
+    .container{max-width:980px;margin:0 auto;padding:20px}
+    header{margin-top:20px}
+    header h1{font-size:1.4rem;color:var(--primary);margin-bottom:4px}
 
-    body {
-      margin: 0;
-      padding: 24px;
-      background: linear-gradient(180deg, #eef2ff, #f7f9ff);
-      color: #0f172a;
-      -webkit-font-smoothing: antialiased;
+    .track-panel{
+      background:#fff;
+      padding:18px;
+      border-radius:14px;
+      box-shadow:0 10px 30px rgba(12,18,35,0.06);
+      display:flex;
+      gap:12px;
+      margin-top:20px;
+    }
+    .track-panel input{
+      flex:1;padding:12px;border-radius:10px;
+      border:1px solid #e6e9f2;font-size:1rem
+    }
+    .btn{
+      padding:10px 14px;border-radius:10px;border:none;
+      font-weight:700;cursor:pointer
+    }
+    .btn--primary{
+      background:linear-gradient(90deg,var(--primary),#06b6d4);color:#fff
     }
 
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
+    .results{
+      margin-top:24px;
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+      gap:14px
     }
 
-    header h1 {
-      margin: 0;
-      font-size: 1.55rem;
-      font-weight: 700;
-      color: var(--primary);
+    .order-card{
+      background:linear-gradient(180deg,#fff,#fbfdff);
+      padding:18px;
+      border-radius:14px;
+      border:1px solid rgba(12,18,35,0.04);
+      box-shadow:0 8px 26px rgba(12,18,35,0.06)
     }
-
-    header .sub {
-      margin-top: 6px;
-      color: var(--muted);
-      font-size: 0.95rem;
-      line-height: 1.45;
+    .order-card h3{margin:0 0 8px 0;font-size:1rem}
+    .meta{font-size:0.93rem;color:var(--muted);margin-bottom:8px}
+    .pill{
+      display:inline-block;
+      padding:6px 10px;
+      border-radius:999px;
+      background:#eef2ff;
+      color:var(--primary);
+      font-weight:700;
+      font-size:0.85rem
     }
-
-    /* ⭐ Track Input Panel */
-    .track-panel {
-      margin-top: 22px;
-      background: rgba(255,255,255,0.45);
-      backdrop-filter: blur(14px);
-      padding: 18px;
-      border-radius: 16px;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.06);
-      display: flex;
-      gap: 12px;
+    .download{
+      background:#0f172a;color:#fff;
+      padding:10px 14px;border-radius:10px;
+      text-decoration:none;font-weight:700;
+      display:inline-block;margin-top:12px
     }
-
-    .track-panel input {
-      flex: 1;
-      padding: 14px;
-      border-radius: 12px;
-      border: 1px solid rgba(0,0,0,0.08);
-      background: rgba(255,255,255,0.75);
-      font-size: 1rem;
-    }
-
-    .btn {
-      padding: 12px 16px;
-      border-radius: 12px;
-      font-weight: 700;
-      border: none;
-      cursor: pointer;
-      min-width: 120px;
-    }
-
-    .btn--primary {
-      background: linear-gradient(90deg, var(--primary), var(--secondary));
-      color: #fff;
-      box-shadow: 0 10px 30px rgba(108,92,231,0.4);
-    }
-
-    /* ⭐ Search Status */
-    #status {
-      margin-top: 14px;
-      font-size: 0.95rem;
-      color: var(--muted);
-      min-height: 20px;
-    }
-
-    /* ⭐ Results Grid */
-    .results {
-      margin-top: 22px;
-      display: grid;
-      grid-template-columns: repeat(auto-fit,minmax(300px,1fr));
-      gap: 18px;
-    }
-
-    /* ⭐ Order Card (Glass UI) */
-    .order-card {
-      background: var(--card-bg);
-      backdrop-filter: blur(14px);
-      padding: 20px;
-      border-radius: 18px;
-      border: 1px solid rgba(255,255,255,0.25);
-      box-shadow: 0 20px 45px rgba(0,0,0,0.08);
-      animation: fadeIn 0.45s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .order-card h3 {
-      margin: 0 0 6px 0;
-      font-size: 1.1rem;
-      font-weight: 700;
-    }
-
-    .meta {
-      margin-bottom: 10px;
-      font-size: 0.9rem;
-      color: var(--muted);
-    }
-
-    .pill {
-      display: inline-block;
-      background: #eef2ff;
-      color: var(--primary);
-      padding: 8px 12px;
-      border-radius: 999px;
-      font-weight: 700;
-      font-size: 0.85rem;
-    }
-
-    .actions {
-      margin-top: 16px;
-    }
-
-    .download {
-      display: inline-block;
-      background: #0f172a;
-      color: #fff;
-      padding: 12px 16px;
-      border-radius: 12px;
-      text-decoration: none;
-      font-weight: 700;
-    }
-
-    .empty {
-      padding: 26px;
-      text-align: center;
-      color: var(--muted);
-      background: rgba(255,255,255,0.45);
-      border-radius: 14px;
-      backdrop-filter: blur(10px);
-    }
-
-    /* Mobile Improvements */
-    @media (max-width: 480px) {
-      body { padding: 16px; }
-      .track-panel { padding: 16px; flex-direction: column; }
-      .btn--primary { width: 100%; }
-    }
+    .empty{text-align:center;padding:30px;color:var(--muted)}
   </style>
 </head>
 
 <body>
-<div class="container">
-  <header>
-    <h1>Track Your Order</h1>
-    <div class="sub">Enter the email used for purchase to view all your orders & downloads.</div>
-  </header>
 
-  <div class="track-panel">
-    <input id="emailInput" type="email" placeholder="you@example.com">
-    <button id="trackBtn" class="btn btn--primary">Track Order</button>
+  <!-- ===== TOP NAV ===== -->
+  <div class="topnav">
+    <div class="logo">iQuote4all</div>
+    <div class="hamburger" onclick="toggleSidebar()">☰</div>
   </div>
 
-  <div id="status"></div>
-  <div id="results" class="results"></div>
-</div>
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar" id="sidebar">
+    <ul>
+      <li onclick="openMyOrder()">My Order</li>
+      <li onclick="openContact()">Contact Us</li>
+      <li onclick="followYoutube()">Follow us on YouTube</li>
+    </ul>
+  </aside>
 
-<script>
-const status = document.getElementById('status');
-const results = document.getElementById('results');
-const btn = document.getElementById('trackBtn');
-const input = document.getElementById('emailInput');
+  <!-- ===== MAIN PAGE ===== -->
+  <div class="container">
+    <header>
+      <h1>Track your orders</h1>
+      <div style="font-size:0.85rem;color:var(--muted)">
+        Enter the email you used during checkout to view all your orders.
+      </div>
+    </header>
 
-btn.onclick = async () => {
-  const email = input.value.trim().toLowerCase();
-  results.innerHTML = "";
-  status.textContent = "";
+    <div class="track-panel">
+      <input id="emailInput" type="email" placeholder="you@example.com">
+      <button id="trackBtn" class="btn btn--primary">Track order</button>
+    </div>
 
-  if (!email) {
-    status.textContent = "Please enter an email.";
-    return;
-  }
+    <div id="status" style="margin-top:10px;font-size:0.88rem;color:var(--muted)"></div>
 
-  status.textContent = "Searching…";
+    <div id="results" class="results"></div>
+  </div>
 
-  try {
-    const res = await fetch("/api/orders?email=" + encodeURIComponent(email));
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.error || "Failed");
-
-    if (!data.count) {
-      status.textContent = "No orders found.";
-      results.innerHTML = `<div class="empty">No orders found for that email.</div>`;
-      return;
+  <script>
+    // ========== SIDEBAR TOGGLE ==========
+    function toggleSidebar(){
+      document.getElementById("sidebar").classList.toggle("open");
     }
 
-    status.textContent = `Found ${data.count} order(s).`;
+    // ========== ORDER TRACKER LOGIC ==========
+    const status = document.getElementById('status');
+    const results = document.getElementById('results');
+    const trackBtn = document.getElementById('trackBtn');
+    const emailInput = document.getElementById('emailInput');
 
-    data.rows.forEach(order => {
-      const card = document.createElement("div");
-      card.className = "order-card";
+    trackBtn.addEventListener('click', fetchOrders);
+    emailInput.addEventListener('keyup', e => { if (e.key === 'Enter') fetchOrders(); });
 
-      card.innerHTML = `
-        <h3>Order Ref: ${order.reference || order.id}</h3>
-        <div class="meta">
-          Channel: <strong>${order.paystack?.channel || "—"}</strong> •  
-          Date: ${order.paidAt ? new Date(order.paidAt._seconds * 1000).toLocaleString() : ""}
-        </div>
-        <div>Amount: <span class="pill">$15.99</span></div>
-        <div style="margin-top:12px">Ref ID: <code>${order.reference}</code></div>
+    async function fetchOrders(){
+      const email = (emailInput.value||"").trim().toLowerCase();
+      results.innerHTML = "";
+      status.textContent = "";
 
-        <div class="actions">
-          <a class="download" href="${order.pdfUrl || '/files/THE ULTIMATE QUOTE BUNDLE.pdf'}" target="_blank">Download PDF</a>
-        </div>
-      `;
+      if (!email){
+        status.textContent = "Please enter a valid email.";
+        return;
+      }
 
-      results.appendChild(card);
-    });
+      status.textContent = "Searching...";
 
-  } catch (err) {
-    console.error(err);
-    status.textContent = "Something went wrong. Try again.";
-  }
-};
+      try{
+        const resp = await fetch("/api/orders?email=" + encodeURIComponent(email));
+        const data = await resp.json();
 
-input.addEventListener("keyup", e => { if (e.key === "Enter") btn.click(); });
-</script>
+        if (!resp.ok) throw new Error(data.error);
+
+        if (data.count === 0){
+          status.textContent = "No orders found.";
+          results.innerHTML = `<div class="empty">No orders found for this email.</div>`;
+          return;
+        }
+
+        status.textContent = `Found ${data.count} order(s).`;
+
+        data.rows.forEach(order=>{
+          const ref = order.reference || order.id;
+          const date = order.paidAt ? new Date(order.paidAt._seconds*1000).toLocaleString() : "";
+          const pdf = order.pdfUrl || "/files/THE ULTIMATE QUOTE BUNDLE.pdf";
+
+          const card = document.createElement("article");
+          card.className = "order-card";
+          card.innerHTML = `
+            <h3>Reference: ${ref}</h3>
+            <div class="meta">Channel: <strong>${order.paystack?.channel || "—"}</strong> • Date: ${date}</div>
+            <div>Amount: <span class="pill">$15.99</span></div>
+            <div style="margin-top:8px">Ref ID: <code>${ref}</code></div>
+            <a class="download" href="${pdf}" target="_blank">Download PDF</a>
+          `;
+          results.appendChild(card);
+        });
+
+      }catch(err){
+        status.textContent = "Error fetching orders.";
+        console.error(err);
+      }
+    }
+  </script>
 
 </body>
 </html>
