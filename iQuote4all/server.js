@@ -8,7 +8,7 @@ const path = require('path');
 
 const app = express();
 
-// Middleware
+// ───────── MIDDLEWARE ─────────
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
@@ -27,14 +27,15 @@ const db = admin.firestore();
 
 // Config (from env)
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
-const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || null; // safe to expose
+const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || null;
 const PAYSTACK_BASE = 'https://api.paystack.co';
 
 const USD_PRICE = Number(process.env.USD_PRICE || '15.99');
 
 const PUBLIC_URL = process.env.PUBLIC_URL || '';
 const PDF_FILE_PATH = process.env.PDF_FILE_PATH || 'files/THE ULTIMATE QUOTE BUNDLE.pdf';
-const PUBLIC_PDF_URL = (PUBLIC_URL || '').replace(/\/$/, '') + '/' + (PDF_FILE_PATH || '').replace(/^\//, '');
+const PUBLIC_PDF_URL =
+  (PUBLIC_URL || '').replace(/\/$/, '') + '/' + (PDF_FILE_PATH || '').replace(/^\//, '');
 
 const EMAILJS_SERVICE_ID = process.env.EMAILJS_SERVICE_ID || null;
 const EMAILJS_TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || null;
@@ -45,33 +46,42 @@ function toKobo(amount) {
   return Math.round(Number(amount) * 100);
 }
 
-// Best-effort: try extracting merchant FX rate from a tiny Paystack initialize call
+/*  
+──────────────────────────────────────────────
+ UPDATED FX FUNCTION (uses access_key=YOUR_KEY)
+──────────────────────────────────────────────
+*/
 async function getExchangeRateFromPaystack() {
-  if (!PAYSTACK_SECRET_KEY) return Number(process.env.FX_FALLBACK || 1500);
-  try {
-    // small init to get fx info — harmless and quick
-    const res = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email: 'fx-check@example.com',
-        amount: 100, // amount in kobo (100 kobo => NGN1), small harmless init
-        currency: 'NGN',
-      }),
-    });
-    const j = await res.json();
-    const rate = j?.data?.fees_breakdown?.[0]?.fx?.merchant_rate;
-    if (rate && !Number.isNaN(Number(rate))) return Number(rate);
-  } catch (e) {
-    console.warn('FX fetch error:', e.message || e);
+  const ACCESS_KEY = process.env.FX_ACCESS_KEY;
+  const FX_API_URL = process.env.FX_API_URL || "http://apilayer.net/api/live";
+
+  if (!ACCESS_KEY) {
+    console.warn("⚠️ Missing FX_ACCESS_KEY — using fallback");
+    return Number(process.env.FX_FALLBACK || 1500);
   }
+
+  try {
+    const url = `${FX_API_URL}?access_key=${ACCESS_KEY}&currencies=NGN&source=USD`;
+
+    const fxRes = await fetch(url);
+    const fxJson = await fxRes.json();
+
+    if (!fxJson || fxJson.success === false) {
+      console.warn("⚠️ FX API error:", fxJson);
+      return Number(process.env.FX_FALLBACK || 1500);
+    }
+
+    const rate = fxJson.quotes?.USDNGN;
+    if (rate && !isNaN(rate)) return rate;
+
+  } catch (e) {
+    console.warn("⚠️ FX fetch error:", e.message || e);
+  }
+
   return Number(process.env.FX_FALLBACK || 1500);
 }
 
-// Public config route for client to fetch public key & pdf url
+// Public config route
 app.get('/config', (req, res) => {
   return res.json({
     paystackPublicKey: PAYSTACK_PUBLIC_KEY || null,
@@ -80,18 +90,17 @@ app.get('/config', (req, res) => {
   });
 });
 
-// 1) Initialize payment: server calculates NGN amount (from USD_PRICE) and initializes Paystack
+// 1) Initialize payment
 app.post('/api/pay', async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email required' });
     if (!PAYSTACK_SECRET_KEY) return res.status(500).json({ error: 'Server misconfigured: missing Paystack secret key' });
 
-    // get FX rate and compute NGN amount (integer)
+    // fetch FX from external API
     const fxRate = await getExchangeRateFromPaystack();
-    const ngnAmount = Math.round(USD_PRICE * fxRate); // integer NGN
+    const ngnAmount = Math.round(USD_PRICE * fxRate);
 
-    // Initialize Paystack transaction
     const initResp = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
       method: 'POST',
       headers: {
@@ -100,7 +109,7 @@ app.post('/api/pay', async (req, res) => {
       },
       body: JSON.stringify({
         email,
-        amount: toKobo(ngnAmount), // kobo
+        amount: toKobo(ngnAmount),
         currency: 'NGN',
         metadata: {
           productId: 'ultimate-quote-bundle',
@@ -118,7 +127,6 @@ app.post('/api/pay', async (req, res) => {
       return res.status(400).json({ error: msg, details: initJson });
     }
 
-    // Save initial transaction doc (non-fatal)
     try {
       await db
         .collection('transactions')
@@ -138,7 +146,7 @@ app.post('/api/pay', async (req, res) => {
     return res.json({
       authorization_url: initJson.data.authorization_url,
       reference: initJson.data.reference,
-      amount: ngnAmount, // integer NGN (client can use)
+      amount: ngnAmount,
     });
   } catch (err) {
     console.error('Init payment error:', err);
@@ -146,7 +154,7 @@ app.post('/api/pay', async (req, res) => {
   }
 });
 
-// 2) Verify payment: server verifies with Paystack and saves to Firestore + sends email via EmailJS (if configured)
+// 2) Verify payment
 app.post('/api/verify', async (req, res) => {
   try {
     const { reference, purchaserEmail } = req.body;
@@ -182,10 +190,8 @@ app.post('/api/verify', async (req, res) => {
       paidAt: admin.firestore.Timestamp.now(),
     };
 
-    // Save order into collection 'my_order'
     await db.collection('my_order').add(record);
 
-    // Update transactions document (merge)
     await db
       .collection('transactions')
       .doc(tx.reference)
@@ -200,7 +206,7 @@ app.post('/api/verify', async (req, res) => {
         { merge: true }
       );
 
-    // Send email via EmailJS REST (if configured)
+    // email sending stays unchanged
     if (EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && EMAILJS_PUBLIC_KEY && userEmail) {
       try {
         const emailPayload = {
@@ -215,8 +221,6 @@ app.post('/api/verify', async (req, res) => {
           },
         };
 
-        console.log('📨 EmailJS payload:', JSON.stringify(emailPayload, null, 2));
-
         const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -224,29 +228,15 @@ app.post('/api/verify', async (req, res) => {
         });
 
         const text = await emailRes.text().catch(() => null);
-        console.log('📬 EmailJS status:', emailRes.status, 'body:', text);
 
         if (!emailRes.ok) {
-          console.error('❌ EmailJS error response:', {
-            status: emailRes.status,
-            body: text,
-          });
-        } else {
-          console.log('✅ EmailJS send OK ->', userEmail);
+          console.error('❌ EmailJS error:', { status: emailRes.status, body: text });
         }
       } catch (e) {
         console.error('❌ EmailJS send failed:', e.message || e);
       }
-    } else {
-      console.warn('⚠️ EmailJS not configured or missing purchaser email', {
-        EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID,
-        EMAILJS_PUBLIC_KEY,
-        userEmail,
-      });
     }
 
-    // respond success
     return res.json({ status: 'success', data: record });
   } catch (err) {
     console.error('Verify error:', err);
@@ -254,16 +244,18 @@ app.post('/api/verify', async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
-// LIST ORDERS BY EMAIL (new endpoint for "My Order" page)
-// GET /api/orders?email=someone@example.com
-// -------------------------------------------------------------
+// List orders
 app.get('/api/orders', async (req, res) => {
   try {
     const email = (req.query.email || '').toString().trim().toLowerCase();
     if (!email) return res.status(400).json({ error: 'email query param required' });
 
-    const snap = await db.collection('my_order').where('email', '==', email).orderBy('paidAt', 'desc').get();
+    const snap = await db
+      .collection('my_order')
+      .where('email', '==', email)
+      .orderBy('paidAt', 'desc')
+      .get();
+
     const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return res.json({ count: rows.length, rows });
   } catch (e) {
@@ -272,9 +264,7 @@ app.get('/api/orders', async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
-// LIST TRANSACTIONS (kept server-side but client will no longer call it)
-// -------------------------------------------------------------
+// List transactions
 app.get('/api/transactions', async (req, res) => {
   try {
     const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(50).get();
@@ -286,7 +276,7 @@ app.get('/api/transactions', async (req, res) => {
   }
 });
 
-// SPA FALLBACK + SERVER START
+// SPA fallback
 app.get('*', (req, res) => {
   res.sendFile(path.resolve(__dirname, 'public', 'index.html'));
 });
