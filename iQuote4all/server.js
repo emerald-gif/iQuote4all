@@ -190,57 +190,73 @@ app.post('/api/verify', async (req, res) => {
       paidAt: admin.firestore.Timestamp.now()
     }, { merge: true });
 
-    // Send email via EmailJS REST (if configured)
-// ---------- REPLACE existing EmailJS send block with this (paste into /api/verify) ----------
-if (EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && EMAILJS_PUBLIC_KEY && userEmail) {
-  try {
-    const emailPayload = {
-      service_id: EMAILJS_SERVICE_ID,
-      template_id: EMAILJS_TEMPLATE_ID,
-      public_key: EMAILJS_PUBLIC_KEY,          // correct field name for REST call
-      template_params: {
-        to_email: userEmail,
-        book_name: 'THE ULTIMATE QUOTE BUNDLE',
-        download_link: PUBLIC_PDF_URL,
-        reference: tx.reference
+// Send email via EmailJS REST (if configured)
+    if (EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && EMAILJS_PUBLIC_KEY && userEmail) {
+      try {
+        const emailPayload = {
+          service_id: EMAILJS_SERVICE_ID,
+          template_id: EMAILJS_TEMPLATE_ID,
+          public_key: EMAILJS_PUBLIC_KEY,
+          template_params: {
+            to_email: userEmail,
+            book_name: 'THE ULTIMATE QUOTE BUNDLE',
+            download_link: PUBLIC_PDF_URL,
+            reference: tx.reference
+          }
+        };
+
+        console.log('📨 EmailJS payload:', JSON.stringify(emailPayload, null, 2));
+
+        const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(emailPayload)
+        });
+
+        const text = await emailRes.text().catch(() => null);
+        console.log('📬 EmailJS status:', emailRes.status, 'body:', text);
+
+        if (!emailRes.ok) {
+          console.error('❌ EmailJS error response:', {
+            status: emailRes.status,
+            body: text
+          });
+        } else {
+          console.log('✅ EmailJS send OK ->', userEmail);
+        }
+      } catch (e) {
+        console.error('❌ EmailJS send failed:', e.message || e);
       }
-    };
-
-    // DEBUG: log the payload before sending (safe — it does not include your secret)
-    console.log('📨 EmailJS payload:', JSON.stringify(emailPayload, null, 2));
-
-    const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(emailPayload)
-    });
-
-    const text = await emailRes.text().catch(() => null);
-    console.log('📬 EmailJS status:', emailRes.status, 'body:', text);
-
-    if (!emailRes.ok) {
-      // EmailJS returned non-200: log and include their response for debugging
-      console.error('❌ EmailJS error response:', {
-        status: emailRes.status,
-        body: text
-      });
-      // Optional: forward the EmailJS error to the client (for testing only)
-      // return res.status(502).json({ error: 'EmailJS error', details: text });
     } else {
-      console.log('✅ EmailJS send OK ->', userEmail);
+      console.warn('⚠️ EmailJS not configured or missing purchaser email', {
+        EMAILJS_SERVICE_ID,
+        EMAILJS_TEMPLATE_ID,
+        EMAILJS_PUBLIC_KEY,
+        userEmail
+      });
     }
-  } catch (e) {
-    console.error('❌ EmailJS send failed (exception):', e && e.message ? e.message : e);
-  }
-} else {
-  console.warn('⚠️ EmailJS not configured or no purchaser email; skipping email send. Values:',
-    { EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, EMAILJS_PUBLIC_KEY, userEmail });
-}
 
-// Transactions listing
+    // respond success
+    return res.json({ status: 'success', data: record });
+
+  } catch (err) {
+    console.error('Verify error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+}); // ✅ CLOSES /api/verify route properly
+
+
+
+// -------------------------------------------------------------
+//  LIST TRANSACTIONS (NOW OUTSIDE /api/verify ROUTE)
+// -------------------------------------------------------------
 app.get('/api/transactions', async (req, res) => {
   try {
-    const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(50).get();
+    const snap = await db.collection('transactions')
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .get();
+
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     return res.json(rows);
   } catch (e) {
@@ -249,11 +265,17 @@ app.get('/api/transactions', async (req, res) => {
   }
 });
 
-// SPA fallback
+
+// -------------------------------------------------------------
+// SPA FALLBACK + SERVER START
+// -------------------------------------------------------------
 app.get('*', (req, res) => {
   res.sendFile(path.resolve(__dirname, 'public', 'index.html'));
 });
 
-// Start
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on ${PORT} (PUBLIC_URL=${PUBLIC_URL})`));
+app.listen(PORT, () =>
+  console.log(`Server running on ${PORT} (PUBLIC_URL=${PUBLIC_URL})`)
+);
+      
+
