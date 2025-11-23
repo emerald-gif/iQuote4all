@@ -1,6 +1,7 @@
-// public/main.js (updated)
+// public/main.js
+// Loads products from server (/api/products) - no local PRODUCTS array anymore
 
-// FIREBASE (unchanged) - compat libs included in HTML
+// FIREBASE CONFIG (unchanged)
 const firebaseConfig = {
   apiKey: "AIzaSyB5amYVfN2M6e1uUHvNh1cIlVD_Fa5g8eQ",
   authDomain: "iquote4all.firebaseapp.com",
@@ -13,22 +14,20 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// runtime config (fetched from /config)
+// runtime config
 let PAYSTACK_PUBLIC_KEY = null;
 let PUBLIC_PDF_URL = null;
-let USD_PRICE = 15.99;
 let PAYSTACK_READY = false;
+let selectedProduct = null;
+let PRODUCTS = []; // fetched from server
 
-// load config and Paystack inline script
 async function initConfigAndPaystack() {
   try {
     const res = await fetch('/config');
     const cfg = await res.json();
     PAYSTACK_PUBLIC_KEY = cfg.paystackPublicKey || null;
     PUBLIC_PDF_URL = cfg.publicPdfUrl || null;
-    USD_PRICE = cfg.usdPrice || USD_PRICE;
 
-    // inject Paystack inline script if not already present
     if (!window.PaystackPop) {
       await new Promise((resolve, reject) => {
         const s = document.createElement('script');
@@ -39,154 +38,127 @@ async function initConfigAndPaystack() {
         document.head.appendChild(s);
       });
     }
-
     PAYSTACK_READY = true;
-    console.log('Paystack ready, public key loaded:', PAYSTACK_PUBLIC_KEY ? 'YES' : 'NO');
-  } catch (err) {
-    console.warn('Failed to init config or Paystack script:', err);
-  }
+  } catch (e) { console.warn('config init failed', e); }
 }
 initConfigAndPaystack();
 
-// UI helpers
-function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  sidebar.style.left = sidebar.style.left === '0px' ? '-280px' : '0px';
+function toggleSidebar(){ const sidebar = document.getElementById('sidebar'); sidebar.style.left = sidebar.style.left === '0px' ? '-280px' : '0px'; }
+function openMyOrders(){ window.location.href = '/my-order.html'; }
+function openContact(){ alert('Contact: mindshiftbooks@example.com'); }
+function followYoutube(){ window.open('https://youtube.com'); }
+
+// Fetch products from server
+async function fetchProducts() {
+  try {
+    const res = await fetch('/api/products');
+    const j = await res.json();
+    PRODUCTS = (j && j.products) ? j.products : [];
+    renderProducts();
+  } catch (e) {
+    console.error('Failed to fetch products', e);
+    document.getElementById('productGrid').innerHTML = '<div style="padding:20px;">Failed to load products.</div>';
+  }
 }
-function showReview() { window.location.href = '/review.html'; }
-function followYoutube() { window.open('https://youtube.com/@iquote4all?si=pnSVWwSmgvO5VFNl'); }
-function openContact() { alert('Contact: iquote4all@gmail.com'); }
 
-// Redirect the old Transactions button to "My Order" page (we no longer fetch transactions client-side)
-function openMyOrders() { window.location.href = '/my-order.html'; }
-
-// Quote carousel (optional) -- unchanged
-let quoteIndex = 0;
-const slides = document.querySelectorAll('.quote-slide');
-const dots = document.querySelectorAll('.dot');
-function showQuote(index) {
-  if (!slides.length) return;
-  slides.forEach((slide, i) => slide.classList.toggle('active', i === index));
-  dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
+// Render product grid from PRODUCTS (from server)
+function renderProducts(){
+  const grid = document.getElementById('productGrid');
+  grid.innerHTML = '';
+  PRODUCTS.forEach(p => {
+    const card = document.createElement('div'); card.className = 'product-card';
+    card.innerHTML = `
+      <img src="${p.cover}" class="ebook-cover" alt="${p.title}" />
+      <div class="title">${p.title}</div>
+      <div class="price">$${Number(p.priceUSD).toFixed(2)}</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn review-btn" onclick="openReview('${p.id}')">Read Review</button>
+        <button class="btn buy-btn" onclick="openCheckoutModal('${p.id}')">Buy eBook</button>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
 }
-function nextQuote() { if (!slides.length) return; quoteIndex = (quoteIndex + 1) % slides.length; showQuote(quoteIndex); }
-function prevQuote() { if (!slides.length) return; quoteIndex = (quoteIndex - 1 + slides.length) % slides.length; showQuote(quoteIndex); }
-if (slides.length) { setInterval(nextQuote, 5000); showQuote(0); }
 
-// Checkout modal helpers
+// initial load
+fetchProducts();
+
+// Review navigation
+function openReview(productId){
+  window.location.href = `/review.html?id=${encodeURIComponent(productId)}`;
+}
+
+// Modal and payment logic: when user clicks buy, we still send productId to /api/pay
 const modalBackdrop = document.getElementById('modalBackdrop');
-function openCheckoutModal() {
+function openCheckoutModal(productId){
+  selectedProduct = PRODUCTS.find(x=>x.id===productId);
+  if(!selectedProduct) { alert('Product not found'); return; }
+  document.getElementById('modalBookTitle').textContent = selectedProduct.title;
+  document.getElementById('modalPrice').textContent = `Price: $${Number(selectedProduct.priceUSD).toFixed(2)}`;
   document.getElementById('buyerEmail').value = '';
   document.getElementById('buyerName').value = '';
   modalBackdrop.style.display = 'flex';
 }
-function closeCheckoutModal() { modalBackdrop.style.display = 'none'; }
-if (modalBackdrop) { modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeCheckoutModal(); }); }
+function closeCheckoutModal(){ modalBackdrop.style.display = 'none'; }
 
-// Proceed to payment (stable inline)
-async function proceedToPayment() {
-  const emailInput = document.getElementById('buyerEmail');
-  const nameInput = document.getElementById('buyerName');
-  const email = emailInput.value && emailInput.value.trim();
-  const name = nameInput.value && nameInput.value.trim();
+async function proceedToPayment(){
+  const email = (document.getElementById('buyerEmail') || {value:''}).value.trim();
+  const name = (document.getElementById('buyerName') || {value:''}).value.trim();
+  if(!email || !/^\S+@\S+\.\S+$/.test(email)){ alert('Please enter a valid email'); return; }
+  if(!selectedProduct){ alert('No product selected'); return; }
 
-  if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
-    alert('Please enter a valid email address.');
-    return;
-  }
-
-  const proceedBtn = document.querySelector('.modal .buy-btn');
-  proceedBtn.disabled = true;
-  proceedBtn.textContent = 'Preparing...';
+  const btn = document.getElementById('modalProceedBtn'); btn.disabled = true; btn.textContent = 'Preparing...';
 
   try {
-    // 1) call server to initialize
     const resp = await fetch('/api/pay', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
+      method: 'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, productId: selectedProduct.id })
     });
     const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || 'Failed to initialize payment.');
+    if(!resp.ok) throw new Error(data.error || 'Payment initialization failed');
 
-    const { reference, amount } = data; // amount = integer NGN returned by server
-    if (!reference) throw new Error('Payment reference missing from server response.');
+    const { reference, amount } = data;
 
-    // wait a short time for Paystack script if needed
     const timeoutAt = Date.now() + 5000;
-    while (!PAYSTACK_READY && Date.now() < timeoutAt) {
-      await new Promise(r => setTimeout(r, 100));
-    }
+    while(!PAYSTACK_READY && Date.now() < timeoutAt) await new Promise(r=>setTimeout(r,100));
+    if(!window.PaystackPop) throw new Error('Paystack not available');
+    if(!PAYSTACK_PUBLIC_KEY) throw new Error('Missing Paystack public key');
 
-    if (!PAYSTACK_READY) throw new Error('Paystack not ready. Try reloading the page.');
-
-    if (!window.PaystackPop) throw new Error('Paystack inline script not loaded.');
-    if (!PAYSTACK_PUBLIC_KEY) throw new Error('Paystack public key not provided by server (/config).');
-
-    // Setup Paystack inline — callback is a plain function (not async) to satisfy inline
     const handler = PaystackPop.setup({
       key: PAYSTACK_PUBLIC_KEY,
       email: email,
-      amount: Math.round(Number(amount) * 100), // NGN -> kobo
+      amount: Math.round(Number(amount) * 100),
       currency: 'NGN',
       ref: reference,
-      metadata: {
-        custom_fields: [{ display_name: 'Buyer name', variable_name: 'buyer_name', value: name || '' }]
-      },
-      callback: function (response) {
-        // call server verify; don't make this callback async function (Paystack expects normal function)
-        verifyPayment(response.reference, email)
-          .catch(err => {
-            console.error('Verification error:', err);
-            alert('Payment succeeded but verification failed. Contact support.');
-          });
-      },
-      onClose: function () {
-        proceedBtn.disabled = false;
-        proceedBtn.textContent = 'Proceed to payment';
-        alert('Payment window closed.');
-      }
+      metadata: { custom_fields:[{ display_name:'Buyer name', variable_name:'buyer_name', value: name||'' }], productId: selectedProduct.id },
+      callback: function(response){ verifyPayment(response.reference, email); },
+      onClose: function(){ btn.disabled=false; btn.textContent='Proceed to Payment'; alert('Payment closed.'); }
     });
-
-    // open inline iframe (stays on same domain)
     handler.openIframe();
 
-  } catch (err) {
-    console.error('proceedToPayment error:', err);
-    alert(err.message || 'Payment failed to start.');
-    proceedBtn.disabled = false;
-    proceedBtn.textContent = 'Proceed to payment';
-  }
+  } catch(err){ console.error(err); alert(err.message || 'Payment failed'); }
+  btn.disabled=false; btn.textContent='Proceed to Payment';
 }
 
-// Verify payment (server-side)
-async function verifyPayment(reference, purchaserEmail) {
-  try {
-    const res = await fetch('/api/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reference, purchaserEmail })
-    });
+async function verifyPayment(reference, purchaserEmail){
+  try{
+    const res = await fetch('/api/verify', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ reference, purchaserEmail }) });
     const data = await res.json();
-    if (res.ok && data.status === 'success') {
-      alert('Payment successful! The PDF will be emailed shortly.');
+    if(res.ok && data.status === 'success'){
+      alert('Payment successful! The file will be emailed shortly.');
       window.location.href = '/';
     } else {
-      console.warn('Verify response:', data);
-      alert('Payment not verified. If money was deducted contact support.');
+      console.warn('verify failed', data); alert('Verification failed. Contact support.');
     }
-  } catch (err) {
-    console.error(err);
-    alert('Verification failed. Contact support.');
-  }
+  }catch(e){ console.error(e); alert('Verification request failed.'); }
 }
 
-// Expose functions for inline HTML to call
+// expose to window
 window.toggleSidebar = toggleSidebar;
-window.showReview = showReview;
-window.followYoutube = followYoutube;
-window.openContact = openContact;
 window.openMyOrders = openMyOrders;
+window.openContact = openContact;
+window.followYoutube = followYoutube;
 window.openCheckoutModal = openCheckoutModal;
 window.closeCheckoutModal = closeCheckoutModal;
 window.proceedToPayment = proceedToPayment;
+window.openReview = openReview;
