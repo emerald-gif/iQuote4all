@@ -51,27 +51,27 @@ async function getExchangeRateFromPaystack() { return 150; }
 const PRODUCTS = {
   'mindshift-101': {
     id: 'mindshift-101',
-    title: 'MindShift — Begin',
+    title: 'Begin',
     priceUSD: 9.99,
-    coverPath: '/images/mindshift-101-cover.jpg',
+    coverPath: '/public/PAGE.jpg',
     pdfPath: 'files/mindshift-101.pdf',
-    reviewImages: ['/images/reviews/mindshift-101-r1.jpg']
+    reviewImages: ['/public/PAGE.jpg']
   },
   'mindshift-advanced': {
     id: 'mindshift-advanced',
-    title: 'MindShift — Advanced Habits',
+    title: 'Advanced Habits',
     priceUSD: 12.99,
-    coverPath: '/images/mindshift-advanced-cover.jpg',
+    coverPath: '/public/PAGE1jpg',
     pdfPath: 'files/mindshift-advanced.pdf',
-    reviewImages: ['/images/reviews/mindshift-advanced-r1.jpg','/images/reviews/mindshift-advanced-r2.jpg']
+    reviewImages: ['/public/PAGE1.jpg','/public/PAGE1.jpg']
   },
   'ultimate-quote-bundle': {
     id: 'ultimate-quote-bundle',
     title: 'The Ultimate Quote Bundle',
     priceUSD: 15.99,
-    coverPath: '/images/quote-bundle.jpg',
+    coverPath: '/public/PAGE2.jpg',
     pdfPath: 'files/quote-bundle.pdf',
-    reviewImages: ['/images/reviews/quote-r1.jpg']
+    reviewImages: ['/public/PAGE2.jpg']
   }
   // add more products here (only change server.js)
 };
