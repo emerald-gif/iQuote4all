@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>My Orders — Track</title>
+  <title>My Orders — MindShift Books</title>
+
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   
   <style>
@@ -44,7 +45,6 @@
       line-height: 1.45;
     }
 
-    /* ⭐ Track Input Panel */
     .track-panel {
       margin-top: 22px;
       background: rgba(255,255,255,0.45);
@@ -80,7 +80,6 @@
       box-shadow: 0 10px 30px rgba(108,92,231,0.4);
     }
 
-    /* ⭐ Search Status */
     #status {
       margin-top: 14px;
       font-size: 0.95rem;
@@ -88,7 +87,6 @@
       min-height: 20px;
     }
 
-    /* ⭐ Results Grid */
     .results {
       margin-top: 22px;
       display: grid;
@@ -96,7 +94,6 @@
       gap: 18px;
     }
 
-    /* ⭐ Order Card (Glass UI) */
     .order-card {
       background: var(--card-bg);
       backdrop-filter: blur(14px);
@@ -157,7 +154,19 @@
       backdrop-filter: blur(10px);
     }
 
-    /* Mobile Improvements */
+    .loader {
+      width: 26px; 
+      height: 26px; 
+      border: 4px solid rgba(0,0,0,0.06);
+      border-top: 4px solid var(--primary);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: auto;
+      margin-top: 18px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     @media (max-width: 480px) {
       body { padding: 16px; }
       .track-panel { padding: 16px; flex-direction: column; }
@@ -170,7 +179,7 @@
 <div class="container">
   <header>
     <h1>Track Your Order</h1>
-    <div class="sub">Enter the email used for purchase to view all your orders & downloads.</div>
+    <div class="sub">Enter the email used for purchase to view all your orders & download links.</div>
   </header>
 
   <div class="track-panel">
@@ -198,13 +207,16 @@ btn.onclick = async () => {
     return;
   }
 
-  status.textContent = "Searching…";
+  status.innerHTML = `<div class="loader"></div>`;
 
   try {
     const res = await fetch("/api/orders?email=" + encodeURIComponent(email));
     const data = await res.json();
 
     if (!res.ok) throw new Error(data.error || "Failed");
+
+    results.innerHTML = "";
+    status.textContent = "";
 
     if (!data.count) {
       status.textContent = "No orders found.";
@@ -215,20 +227,30 @@ btn.onclick = async () => {
     status.textContent = `Found ${data.count} order(s).`;
 
     data.rows.forEach(order => {
+      const pdfUrl = order.pdfUrl || "#";
+      const title = order.productTitle || "Purchased eBook";
+
+      let paidTime = "";
+      if (order.paidAt?._seconds) {
+        paidTime = new Date(order.paidAt._seconds * 1000).toLocaleString();
+      }
+
       const card = document.createElement("div");
       card.className = "order-card";
 
       card.innerHTML = `
-        <h3>Order Ref: ${order.reference || order.id}</h3>
+        <h3>${title}</h3>
+
         <div class="meta">
-          Channel: <strong>${order.paystack?.channel || "—"}</strong> •  
-          Date: ${order.paidAt ? new Date(order.paidAt._seconds * 1000).toLocaleString() : ""}
+          Ref: <strong>${order.reference}</strong><br>
+          Paid: <strong>${paidTime}</strong><br>
+          Channel: ${order.paystack?.channel || "—"}
         </div>
-        <div>Amount: <span class="pill">$15.99</span></div>
-        <div style="margin-top:12px">Ref ID: <code>${order.reference}</code></div>
+
+        <div>Amount: <span class="pill">₦${order.ngn_amount || "0"}</span></div>
 
         <div class="actions">
-          <a class="download" href="${order.pdfUrl || '/files/THE ULTIMATE QUOTE BUNDLE.pdf'}" target="_blank">Download PDF</a>
+          <a class="download" href="${pdfUrl}" target="_blank">Download PDF</a>
         </div>
       `;
 
