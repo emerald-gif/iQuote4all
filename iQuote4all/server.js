@@ -94,25 +94,25 @@ const PRODUCTS = {
     id: 'mindshift-101',
     title: 'Begin',
     priceUSD: 9.99,
-    coverPath: '/images/PAGE.jpg',
+    coverPath: 'PAGE.jpg',
     pdfPath: 'files/mindshift-101.pdf',
-    reviewImages: ['/images/PAGE.jpg']
+    reviewImages: ['PAGE.jpg']
   },
   'mindshift-advanced': {
     id: 'mindshift-advanced',
     title: 'Advanced Habits',
     priceUSD: 12.99,
-    coverPath: '/images/PAGE1.jpg',
+    coverPath: 'PAGE1.jpg',
     pdfPath: 'files/mindshift-advanced.pdf',
-    reviewImages: ['/images/PAGE1.jpg','/images/PAGE1-2.jpg']
+    reviewImages: ['PAGE1.jpg','PAGE2.jpg']
   },
   'ultimate-quote-bundle': {
     id: 'ultimate-quote-bundle',
     title: 'The Ultimate Quote Bundle',
     priceUSD: 15.99,
-    coverPath: '/images/PAGE2.jpg',
+    coverPath: 'PAGE2.jpg',
     pdfPath: 'files/quote-bundle.pdf',
-    reviewImages: ['/images/PAGE2.jpg']
+    reviewImages: ['PAGE2.jpg']
   }
   // add more products here (only change server.js)
 };
