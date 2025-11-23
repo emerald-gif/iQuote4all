@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>My Orders — Track</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --primary: #6c5ce7;
+      --secondary: #06b6d4;
+      --bg: #f5f7ff;
+      --muted: #6b7280;
+      --card-bg: rgba(255,255,255,0.55);
+    }
+
+    * { box-sizing: border-box; font-family: Inter, sans-serif; }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      background: linear-gradient(180deg, #eef2ff, #f7f9ff);
+      color: #0f172a;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.55rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    header .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    /* ⭐ Track Input Panel */
+    .track-panel {
+      margin-top: 22px;
+      background: rgba(255,255,255,0.45);
+      backdrop-filter: blur(14px);
+      padding: 18px;
+      border-radius: 16px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.06);
+      display: flex;
+      gap: 12px;
+    }
+
+    .track-panel input {
+      flex: 1;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: rgba(255,255,255,0.75);
+      font-size: 1rem;
+    }
+
+    .btn {
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      min-width: 120px;
+    }
+
+    .btn--primary {
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      color: #fff;
+      box-shadow: 0 10px 30px rgba(108,92,231,0.4);
+    }
+
+    /* ⭐ Search Status */
+    #status {
+      margin-top: 14px;
+      font-size: 0.95rem;
+      color: var(--muted);
+      min-height: 20px;
+    }
+
+    /* ⭐ Results Grid */
+    .results {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit,minmax(300px,1fr));
+      gap: 18px;
+    }
+
+    /* ⭐ Order Card (Glass UI) */
+    .order-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(14px);
+      padding: 20px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.25);
+      box-shadow: 0 20px 45px rgba(0,0,0,0.08);
+      animation: fadeIn 0.45s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .order-card h3 {
+      margin: 0 0 6px 0;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .meta {
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .pill {
+      display: inline-block;
+      background: #eef2ff;
+      color: var(--primary);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    .actions {
+      margin-top: 16px;
+    }
+
+    .download {
+      display: inline-block;
+      background: #0f172a;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .empty {
+      padding: 26px;
+      text-align: center;
+      color: var(--muted);
+      background: rgba(255,255,255,0.45);
+      border-radius: 14px;
+      backdrop-filter: blur(10px);
+    }
+
+    /* Mobile Improvements */
+    @media (max-width: 480px) {
+      body { padding: 16px; }
+      .track-panel { padding: 16px; flex-direction: column; }
+      .btn--primary { width: 100%; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="container">
+  <header>
+    <h1>Track Your Order</h1>
+    <div class="sub">Enter the email used for purchase to view all your orders & downloads.</div>
+  </header>
+
+  <div class="track-panel">
+    <input id="emailInput" type="email" placeholder="you@example.com">
+    <button id="trackBtn" class="btn btn--primary">Track Order</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="results" class="results"></div>
+</div>
+
+<script>
+const status = document.getElementById('status');
+const results = document.getElementById('results');
+const btn = document.getElementById('trackBtn');
+const input = document.getElementById('emailInput');
+
+btn.onclick = async () => {
+  const email = input.value.trim().toLowerCase();
+  results.innerHTML = "";
+  status.textContent = "";
+
+  if (!email) {
+    status.textContent = "Please enter an email.";
+    return;
+  }
+
+  status.textContent = "Searching…";
+
+  try {
+    const res = await fetch("/api/orders?email=" + encodeURIComponent(email));
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || "Failed");
+
+    if (!data.count) {
+      status.textContent = "No orders found.";
+      results.innerHTML = `<div class="empty">No orders found for that email.</div>`;
+      return;
+    }
+
+    status.textContent = `Found ${data.count} order(s).`;
+
+    data.rows.forEach(order => {
+      const card = document.createElement("div");
+      card.className = "order-card";
+
+      card.innerHTML = `
+        <h3>Order Ref: ${order.reference || order.id}</h3>
+        <div class="meta">
+          Channel: <strong>${order.paystack?.channel || "—"}</strong> •  
+          Date: ${order.paidAt ? new Date(order.paidAt._seconds * 1000).toLocaleString() : ""}
+        </div>
+        <div>Amount: <span class="pill">$15.99</span></div>
+        <div style="margin-top:12px">Ref ID: <code>${order.reference}</code></div>
+
+        <div class="actions">
+          <a class="download" href="${order.pdfUrl || '/files/THE ULTIMATE QUOTE BUNDLE.pdf'}" target="_blank">Download PDF</a>
+        </div>
+      `;
+
+      results.appendChild(card);
+    });
+
+  } catch (err) {
+    console.error(err);
+    status.textContent = "Something went wrong. Try again.";
+  }
+};
+
+input.addEventListener("keyup", e => { if (e.key === "Enter") btn.click(); });
+</script>
+
+</body>
+</html>

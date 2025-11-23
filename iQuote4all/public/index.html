@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>iQuote4all | eBook Store</title>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --secondary: #fbbf24;
+      --bg: #f8fafc;
+      --text: #111827;
+      --card-shadow: 0 18px 40px rgba(0,0,0,0.08);
+      --accent-2: #06b6d4;
+    }
+
+    *{
+      box-sizing:border-box;
+      margin:0; padding:0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body{
+      background: linear-gradient(180deg,#f8fafc 0%, #eef2f7 100%);
+      min-height:100vh;
+      color: var(--text);
+    }
+
+    /* HEADER */
+    header{
+      position: fixed;
+      top:0; left:0; right:0;
+      padding:16px 26px;
+      background:white;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      z-index:1000;
+      box-shadow:0 2px 12px rgba(0,0,0,0.06);
+    }
+
+    header h1{
+      font-size:1.45rem;
+      font-weight:700;
+      color:var(--primary);
+      letter-spacing:.3px;
+    }
+
+    .hamburger{
+      font-size:1.3rem;
+      cursor:pointer;
+      color:#1e293b;
+      transition:.25s;
+    }
+    .hamburger:hover{
+      transform:scale(1.08);
+    }
+
+    /* SIDEBAR */
+    .sidebar{
+      position: fixed;
+      top:0; left:-280px;
+      width:260px;
+      height:100%;
+      background:#1f2937;
+      padding-top:80px;
+      transition:.45s ease;
+      z-index:999;
+      border-right:1px solid rgba(255,255,255,0.04);
+    }
+    .sidebar ul{ list-style:none;}
+    .sidebar li{
+      padding:18px 26px;
+      color:white;
+      font-size:1.05rem;
+      cursor:pointer;
+      font-weight:600;
+      border-bottom:1px solid rgba(255,255,255,0.06);
+      transition:.18s;
+    }
+    .sidebar li:hover{
+      background:#374151;
+    }
+
+    /* MAIN CONTENT */
+    main{
+      padding:120px 20px 120px;
+      max-width:1100px;
+      margin:0 auto;
+    }
+
+    /* SWIPER / HERO */
+    .enhanced-swiper{
+      position:relative;
+      padding:42px 25px 60px;
+      background:linear-gradient(135deg, rgba(79,70,229,0.10), rgba(6,182,212,0.09));
+      border-radius:20px;
+      box-shadow: var(--card-shadow);
+      overflow:hidden;
+      text-align:center;
+      min-height:180px;
+    }
+
+    .quote-slide{
+      position:absolute;
+      top:50%;
+      left:50%;
+      width:100%;
+      transform:translate(-50%, -50%);
+      opacity:0;
+      transition:.8s;
+    }
+    .quote-slide.active{
+      opacity:1;
+    }
+
+    .quote-text{
+      font-size:1.3rem;
+      font-weight:700;
+      line-height:1.45;
+      color:#0f172a;
+    }
+    .quote-author{
+      margin-top:10px;
+      font-size:.95rem;
+      color:var(--primary);
+      opacity:.9;
+      font-weight:600;
+      display:block;
+    }
+
+    .nav-arrow{
+      position:absolute;
+      top:50%;
+      transform:translateY(-50%);
+      background:white;
+      border:none;
+      width:38px;
+      height:38px;
+      border-radius:50%;
+      box-shadow:0 6px 15px rgba(0,0,0,0.12);
+      color:var(--primary);
+      cursor:pointer;
+    }
+    .nav-arrow.left{ left:12px; }
+    .nav-arrow.right{ right:12px; }
+
+    /* DOTS */
+    .quote-dots{
+      position:absolute;
+      bottom:20px;
+      width:100%;
+      display:flex;
+      justify-content:center;
+      gap:8px;
+    }
+    .dot{
+      width:10px; height:10px;
+      background:rgba(79,70,229,0.25);
+      border-radius:50%;
+    }
+    .dot.active{
+      background:var(--primary);
+      width:14px; height:14px;
+    }
+
+    /* PRODUCT CARD */
+    .promo-card{
+      background:white;
+      width:320px;
+      padding:22px;
+      border-radius:18px;
+      box-shadow: var(--card-shadow);
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:12px;
+    }
+
+    .ebook-cover{
+      width:100%;
+      max-width:240px;
+      border-radius:12px;
+      box-shadow:0 12px 30px rgba(15,23,42,0.06);
+    }
+
+    .btn{
+      padding:12px 22px;
+      border-radius:10px;
+      border:none;
+      font-weight:700;
+      cursor:pointer;
+    }
+
+    .buy-btn{
+      background:linear-gradient(90deg,var(--primary),var(--accent-2));
+      color:white;
+      box-shadow:0 10px 26px rgba(79,70,229,0.25);
+    }
+    .review-btn{
+      border:2px solid rgba(79,70,229,0.15);
+      background:white;
+      color:var(--primary);
+    }
+
+    /* FEATURES */
+    .features{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:18px;
+      margin-top:30px;
+    }
+    .card{
+      background:white;
+      padding:22px;
+      border-radius:16px;
+      box-shadow: var(--card-shadow);
+    }
+    .card h3{
+      margin-bottom:8px;
+      color:var(--primary);
+    }
+
+    /* FOOTER */
+    footer{
+      margin-top:40px;
+      background:#0f172a;
+      padding:24px;
+      border-radius:14px;
+      display:flex;
+      justify-content:space-between;
+      color:white;
+      box-shadow:0 10px 40px rgba(2,6,23,0.6);
+    }
+
+    .bottom-bar{
+      margin-top:16px;
+      background:#0b1220;
+      padding:18px;
+      border-radius:12px;
+      text-align:center;
+      color:white;
+    }
+
+    /* CHECKOUT MODAL */
+    .modal-backdrop{
+      position:fixed;
+      inset:0;
+      display:none;
+      background:rgba(2,6,23,0.45);
+      justify-content:center;
+      align-items:center;
+      z-index:2000;
+    }
+
+    .modal{
+      background:white;
+      width:420px;
+      max-width:92%;
+      padding:22px;
+      border-radius:14px;
+      box-shadow: var(--card-shadow);
+    }
+
+    .muted{
+      font-size:.9rem;
+      color:#6b7280;
+    }
+
+    .field{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin:10px 0;
+    }
+
+    input{
+      padding:11px 12px;
+      border-radius:8px;
+      border:1px solid #e5e7eb;
+    }
+
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>iQuote4all</h1>
+  <div class="hamburger" onclick="toggleSidebar()"><i class="fas fa-bars"></i></div>
+</header>
+
+<aside class="sidebar" id="sidebar">
+  <ul>
+    <li onclick="openMyOrders()">My Order</li>
+    <li onclick="openContact()">Contact Us</li>
+    <li onclick="followYoutube()">Follow us on YouTube</li>
+  </ul>
+</aside>
+
+<main>
+
+  <!-- HERO + PRODUCT -->
+  <section class="hero">
+    <div class="enhanced-swiper">
+      <div class="quote-slide active">
+        <p class="quote-text">“If you can’t control the world, control your habits—your life will follow.”</p>
+        <span class="quote-author">— iQuote4all</span>
+      </div>
+
+      <div class="quote-slide">
+        <p class="quote-text">“Whether you think you can or you think you can’t, you’re right.”</p>
+        <span class="quote-author">— iQuote4all</span>
+      </div>
+
+      <div class="quote-slide">
+        <p class="quote-text">“We are what we repeatedly do.”</p>
+        <span class="quote-author">— iQuote4all</span>
+      </div>
+
+      <button class="nav-arrow left" onclick="prevQuote()"><i class="fas fa-chevron-left"></i></button>
+      <button class="nav-arrow right" onclick="nextQuote()"><i class="fas fa-chevron-right"></i></button>
+
+      <div class="quote-dots">
+        <span class="dot active"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </div>
+    </div>
+
+    <div class="promo-card">
+      <img src="book.jpg" class="ebook-cover"/>
+      <h2>THE ULTIMATE QUOTE BUNDLE</h2>
+      <div class="price" style="font-weight:700; font-size:1.15rem;">$15.99</div>
+
+      <div style="display:flex; gap:10px;">
+        <button class="btn review-btn" onclick="showReview()">Read Review</button>
+        <button class="btn buy-btn" onclick="openCheckoutModal()">Buy eBook</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features">
+    <div class="card">
+      <h3>Instant Delivery</h3>
+      <p class="muted">PDF link will be emailed instantly after payment.</p>
+    </div>
+
+    
+
+    <div class="card">
+      <h3>Email not Received?</h3>
+      <p class="muted">  If you don't receive the email, download the PDF inside<b>My Order</b></p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div>
+      <div style="font-weight:700; font-size:1.1rem; color:var(--secondary);">iQuote4all</div>
+      <div class="muted" style="color:white;">Inspiring quotes, one bundle at a time.</div>
+    </div>
+
+    <div style="text-align:right;">
+      <div>© 2025 iQuote4all</div>
+      <div class="muted" style="color:white;">All rights reserved</div>
+    </div>
+  </footer>
+
+  <div class="bottom-bar">
+    Get the full collection — <strong>THE ULTIMATE QUOTE BUNDLE</strong><br>
+    Contact: <b>iquote4all@gmail.com</b>
+  </div>
+
+</main>
+
+<!-- CHECKOUT MODAL -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3 style="color:var(--primary); margin-bottom:6px;">Checkout</h3>
+    <div class="muted">Book: <strong>THE ULTIMATE QUOTE BUNDLE</strong></div>
+    <div style="margin-top:8px; font-weight:700;">Price: $15.99</div>
+
+    <div class="field">
+      <label class="muted">Your name (optional)</label>
+      <input id="buyerName" type="text" placeholder="Jane Doe"/>
+    </div>
+
+    <div class="field">
+      <label class="muted">Enter your email (PDF will be sent here)</label>
+      <input id="buyerEmail" type="email" placeholder="you@example.com" required/>
+    </div>
+
+    <div class="actions" style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
+      <button class="btn review-btn" onclick="closeCheckoutModal()">Cancel</button>
+      <button class="btn buy-btn" onclick="proceedToPayment()">Proceed to Payment</button>
+    </div>
+
+    <div class="muted" style="margin-top:12px;">
+      After payment you'll be redirected and the PDF will be emailed automatically.
+    </div>
+
+    <!-- ⭐ NEW TEXT YOU REQUESTED ⭐ -->
+    <div class="muted" style="margin-top:6px; font-size:0.88rem; color:#475569;">
+      If you don’t receive the email, download your PDF inside <b>My Order</b>.
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.emailjs.com/sdk/3.2/email.min.js"></script>
+<script src="https://js.paystack.co/v1/inline.js"></script>
+<script src="main.js"></script>
+
+</body>
+</html>
