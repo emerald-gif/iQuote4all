@@ -1,5 +1,5 @@
 // server.js
-// Single source of truth for products + Paystack endpoints
+// MindShift Books - Single source of truth for products + Paystack endpoints
 // Install: npm i express node-fetch firebase-admin cors body-parser
 const express = require('express');
 const path = require('path');
@@ -44,34 +44,75 @@ const EMAILJS_TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || null;
 const EMAILJS_PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || null;
 
 function toKobo(ngn) { return Math.round(Number(ngn) * 100); }
-async function getExchangeRateFromPaystack() { return 150; }
+
+/**
+ * Get USD -> NGN exchange rate
+ * Priority:
+ *  1) process.env.FX_RATE (manual override, e.g. 1500)
+ *  2) live lookup via exchangerate.host
+ *  3) fallback to 1500
+ */
+async function getExchangeRate() {
+  const FALLBACK = 1500;
+
+  // 1) env override
+  if (process.env.FX_RATE) {
+    const v = Number(process.env.FX_RATE);
+    if (!Number.isNaN(v) && v > 0) {
+      console.log('[FX] using FX_RATE env override =>', v);
+      return v;
+    } else {
+      console.warn('[FX] FX_RATE env var is invalid:', process.env.FX_RATE);
+    }
+  }
+
+  // 2) live lookup
+  try {
+    console.log('[FX] attempting live lookup via exchangerate.host');
+    const resp = await fetch('https://api.exchangerate.host/convert?from=USD&to=NGN');
+    const json = await resp.json().catch(() => null);
+    const rate = json && (json.info?.rate || json.result);
+    if (rate && Number.isFinite(rate) && Number(rate) > 0) {
+      console.log('[FX] live rate fetched =>', rate);
+      return Number(rate);
+    } else {
+      console.warn('[FX] live lookup returned invalid rate:', json);
+    }
+  } catch (err) {
+    console.warn('[FX] live lookup failed:', err.message || err);
+  }
+
+  // 3) fallback
+  console.warn(`[FX] falling back to fixed rate => ${FALLBACK}`);
+  return FALLBACK;
+}
 
 // ----------------- PRODUCTS (single source: edit here) -----------------
-// Each product includes: id, title, priceUSD, coverPath (public/images/...), pdfPath (files/...), reviewImages (public/images/reviews/...)
+// Make sure coverPath starts with /images/... and pdfPath with files/...
 const PRODUCTS = {
   'mindshift-101': {
     id: 'mindshift-101',
     title: 'Begin',
     priceUSD: 9.99,
-    coverPath: '/public/PAGE.jpg',
+    coverPath: '/images/PAGE.jpg',
     pdfPath: 'files/mindshift-101.pdf',
-    reviewImages: ['/public/PAGE.jpg']
+    reviewImages: ['/images/PAGE.jpg']
   },
   'mindshift-advanced': {
     id: 'mindshift-advanced',
     title: 'Advanced Habits',
     priceUSD: 12.99,
-    coverPath: '/public/PAGE1jpg',
+    coverPath: '/images/PAGE1.jpg',
     pdfPath: 'files/mindshift-advanced.pdf',
-    reviewImages: ['/public/PAGE1.jpg','/public/PAGE1.jpg']
+    reviewImages: ['/images/PAGE1.jpg','/images/PAGE1-2.jpg']
   },
   'ultimate-quote-bundle': {
     id: 'ultimate-quote-bundle',
     title: 'The Ultimate Quote Bundle',
     priceUSD: 15.99,
-    coverPath: '/public/PAGE2.jpg',
+    coverPath: '/images/PAGE2.jpg',
     pdfPath: 'files/quote-bundle.pdf',
-    reviewImages: ['/public/PAGE2.jpg']
+    reviewImages: ['/images/PAGE2.jpg']
   }
   // add more products here (only change server.js)
 };
@@ -128,6 +169,34 @@ app.get('/config', (req, res) => {
   return res.json({ paystackPublicKey: PAYSTACK_PUBLIC_KEY || null, publicPdfUrl: PUBLIC_PDF_URL || null });
 });
 
+// ---------- NEW: /api/orders - return orders for an email (enriched) ----------
+app.get('/api/orders', async (req, res) => {
+  try {
+    const email = (req.query.email || '').trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    if (!db) return res.status(500).json({ error: 'Firestore not configured' });
+
+    // Query Firestore for orders matching email
+    const snap = await db.collection('my_order').where('email', '==', email).orderBy('paidAt', 'desc').get();
+    const rows = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      // enrich with productTitle if productId matches
+      const productTitle = d.productId && PRODUCTS[d.productId] ? PRODUCTS[d.productId].title : null;
+      rows.push({
+        id: doc.id,
+        ...d,
+        productTitle,
+      });
+    });
+
+    return res.json({ count: rows.length, rows });
+  } catch (err) {
+    console.error('/api/orders error', err);
+    return res.status(500).json({ error: err.message || 'Server error' });
+  }
+});
+
 // /api/pay - initialize Paystack for a product
 app.post('/api/pay', async (req, res) => {
   try {
@@ -137,8 +206,10 @@ app.post('/api/pay', async (req, res) => {
     const product = PRODUCTS[productId];
     if (!product) return res.status(400).json({ error: 'Invalid productId' });
 
-    const fxRate = await getExchangeRateFromPaystack();
+    // NEW: Get fxRate via helper with env override, live lookup, fallback 1500
+    const fxRate = await getExchangeRate();
     const ngnAmount = Math.round(Number(product.priceUSD) * Number(fxRate));
+    console.log(`[PAY] product=${product.id} priceUSD=${product.priceUSD} fxRate=${fxRate} => ngnAmount=${ngnAmount}`);
 
     if (!PAYSTACK_SECRET_KEY) {
       const fakeRef = `TEST_REF_${Date.now()}`;
