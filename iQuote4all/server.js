@@ -1,285 +1,261 @@
 // server.js
-require('dotenv').config();
+// Single source of truth for products + Paystack endpoints
+// Install: npm i express node-fetch firebase-admin cors body-parser
 const express = require('express');
-const fetch = require('node-fetch');
-const admin = require('firebase-admin');
-const bodyParser = require('body-parser');
 const path = require('path');
+const fetch = require('node-fetch');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const admin = require('firebase-admin');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// ───────── MIDDLEWARE ─────────
-app.use(bodyParser.json());
-app.use(express.static('public'));
+app.use(cors());
+app.use(bodyParser.json({ limit: '1mb' }));
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// Firebase Admin init
-let serviceAccount = {};
+// Serve static assets
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/files', express.static(path.join(__dirname, 'files')));
+
+// Firebase admin init (SERVICE_ACCOUNT_JSON or ADC)
 try {
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '{}');
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-} catch (err) {
-  console.error('Firebase init error:', err);
-  process.exit(1);
+  if (process.env.SERVICE_ACCOUNT_JSON) {
+    const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    console.log('firebase-admin initialized from SERVICE_ACCOUNT_JSON');
+  } else {
+    admin.initializeApp();
+    console.log('firebase-admin initialized from ADC/default credentials');
+  }
+} catch (e) {
+  console.warn('firebase-admin init warning:', e.message || e);
 }
-const db = admin.firestore();
+const db = admin.firestore ? admin.firestore() : null;
 
-// Config (from env)
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
-const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || null;
+// Paystack / email config
 const PAYSTACK_BASE = 'https://api.paystack.co';
-
-const USD_PRICE = Number(process.env.USD_PRICE || '15.99');
-
-const PUBLIC_URL = process.env.PUBLIC_URL || '';
-const PDF_FILE_PATH = process.env.PDF_FILE_PATH || 'files/THE ULTIMATE QUOTE BUNDLE.pdf';
-const PUBLIC_PDF_URL =
-  (PUBLIC_URL || '').replace(/\/$/, '') + '/' + (PDF_FILE_PATH || '').replace(/^\//, '');
-
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || null;
+const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || null;
+const PUBLIC_PDF_URL = process.env.PUBLIC_PDF_URL || null;
 const EMAILJS_SERVICE_ID = process.env.EMAILJS_SERVICE_ID || null;
 const EMAILJS_TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || null;
 const EMAILJS_PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || null;
 
-// Helper: convert to kobo
-function toKobo(amount) {
-  return Math.round(Number(amount) * 100);
+function toKobo(ngn) { return Math.round(Number(ngn) * 100); }
+async function getExchangeRateFromPaystack() { return 150; }
+
+// ----------------- PRODUCTS (single source: edit here) -----------------
+// Each product includes: id, title, priceUSD, coverPath (public/images/...), pdfPath (files/...), reviewImages (public/images/reviews/...)
+const PRODUCTS = {
+  'mindshift-101': {
+    id: 'mindshift-101',
+    title: 'MindShift — Begin',
+    priceUSD: 9.99,
+    coverPath: '/images/mindshift-101-cover.jpg',
+    pdfPath: 'files/mindshift-101.pdf',
+    reviewImages: ['/images/reviews/mindshift-101-r1.jpg']
+  },
+  'mindshift-advanced': {
+    id: 'mindshift-advanced',
+    title: 'MindShift — Advanced Habits',
+    priceUSD: 12.99,
+    coverPath: '/images/mindshift-advanced-cover.jpg',
+    pdfPath: 'files/mindshift-advanced.pdf',
+    reviewImages: ['/images/reviews/mindshift-advanced-r1.jpg','/images/reviews/mindshift-advanced-r2.jpg']
+  },
+  'ultimate-quote-bundle': {
+    id: 'ultimate-quote-bundle',
+    title: 'The Ultimate Quote Bundle',
+    priceUSD: 15.99,
+    coverPath: '/images/quote-bundle.jpg',
+    pdfPath: 'files/quote-bundle.pdf',
+    reviewImages: ['/images/reviews/quote-r1.jpg']
+  }
+  // add more products here (only change server.js)
+};
+// -----------------------------------------------------------------------
+
+function derivePublicUrl(req) {
+  if (process.env.PUBLIC_URL && process.env.PUBLIC_URL.trim()) return process.env.PUBLIC_URL.replace(/\/$/, '');
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const host = req.get('host');
+  return `${proto}://${host}`;
 }
 
-/*  
-──────────────────────────────────────────────
- UPDATED FX FUNCTION (uses access_key=YOUR_KEY)
-──────────────────────────────────────────────
-*/
-async function getExchangeRateFromPaystack() {
-  const ACCESS_KEY = process.env.FX_ACCESS_KEY;
-  const FX_API_URL = process.env.FX_API_URL || "http://apilayer.net/api/live";
-
-  if (!ACCESS_KEY) {
-    console.warn("⚠️ Missing FX_ACCESS_KEY — using fallback");
-    return Number(process.env.FX_FALLBACK || 1500);
-  }
-
+// Return minimal product info to clients (no pdfPath)
+app.get('/api/products', (req, res) => {
   try {
-    const url = `${FX_API_URL}?access_key=${ACCESS_KEY}&currencies=NGN&source=USD`;
-
-    const fxRes = await fetch(url);
-    const fxJson = await fxRes.json();
-
-    if (!fxJson || fxJson.success === false) {
-      console.warn("⚠️ FX API error:", fxJson);
-      return Number(process.env.FX_FALLBACK || 1500);
-    }
-
-    const rate = fxJson.quotes?.USDNGN;
-    if (rate && !isNaN(rate)) return rate;
-
+    const out = Object.values(PRODUCTS).map(p => ({
+      id: p.id,
+      title: p.title,
+      priceUSD: p.priceUSD,
+      cover: p.coverPath,
+      reviewImages: p.reviewImages || [],
+      hasPdf: !!p.pdfPath
+    }));
+    return res.json({ products: out });
   } catch (e) {
-    console.warn("⚠️ FX fetch error:", e.message || e);
+    console.error(e);
+    return res.status(500).json({ error: 'Could not load products' });
   }
-
-  return Number(process.env.FX_FALLBACK || 1500);
-}
-
-// Public config route
-app.get('/config', (req, res) => {
-  return res.json({
-    paystackPublicKey: PAYSTACK_PUBLIC_KEY || null,
-    publicPdfUrl: PUBLIC_PDF_URL || null,
-    usdPrice: USD_PRICE,
-  });
 });
 
-// 1) Initialize payment
+// Single product (for review page)
+app.get('/api/product/:id', (req, res) => {
+  try {
+    const pid = req.params.id;
+    const p = PRODUCTS[pid];
+    if (!p) return res.status(404).json({ error: 'Product not found' });
+    const out = {
+      id: p.id,
+      title: p.title,
+      priceUSD: p.priceUSD,
+      cover: p.coverPath,
+      reviewImages: p.reviewImages || [],
+      hasPdf: !!p.pdfPath
+    };
+    return res.json({ product: out });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// /config endpoint for client (Paystack public key + optional publicPdf fallback)
+app.get('/config', (req, res) => {
+  return res.json({ paystackPublicKey: PAYSTACK_PUBLIC_KEY || null, publicPdfUrl: PUBLIC_PDF_URL || null });
+});
+
+// /api/pay - initialize Paystack for a product
 app.post('/api/pay', async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, productId } = req.body;
     if (!email) return res.status(400).json({ error: 'Email required' });
-    if (!PAYSTACK_SECRET_KEY) return res.status(500).json({ error: 'Server misconfigured: missing Paystack secret key' });
+    if (!productId) return res.status(400).json({ error: 'productId required' });
+    const product = PRODUCTS[productId];
+    if (!product) return res.status(400).json({ error: 'Invalid productId' });
 
-    // fetch FX from external API
     const fxRate = await getExchangeRateFromPaystack();
-    const ngnAmount = Math.round(USD_PRICE * fxRate);
+    const ngnAmount = Math.round(Number(product.priceUSD) * Number(fxRate));
+
+    if (!PAYSTACK_SECRET_KEY) {
+      const fakeRef = `TEST_REF_${Date.now()}`;
+      if (db) {
+        await db.collection('transactions').doc(fakeRef).set({
+          reference: fakeRef, email, amount: ngnAmount, status: 'initialized',
+          metadata: { productId: product.id, usd_price: product.priceUSD, fx_rate: fxRate, ngn_charged: ngnAmount },
+          createdAt: admin.firestore.Timestamp.now()
+        }).catch(()=>null);
+      }
+      return res.json({ authorization_url: null, reference: fakeRef, amount: ngnAmount });
+    }
 
     const initResp = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
         amount: toKobo(ngnAmount),
         currency: 'NGN',
-        metadata: {
-          productId: 'ultimate-quote-bundle',
-          usd_price: USD_PRICE,
-          fx_rate: fxRate,
-          ngn_charged: ngnAmount,
-        },
-      }),
+        metadata: { productId: product.id, usd_price: product.priceUSD, fx_rate: fxRate, ngn_charged: ngnAmount }
+      })
     });
+    const initJson = await initResp.json().catch(()=>null);
+    if (!initJson || initJson.status === false) return res.status(400).json({ error: initJson ? initJson.message : 'Paystack init failed', details: initJson });
 
-    const initJson = await initResp.json();
-
-    if (!initJson || initJson.status === false) {
-      const msg = initJson?.message || 'Paystack initialize failed';
-      return res.status(400).json({ error: msg, details: initJson });
+    if (db) {
+      await db.collection('transactions').doc(initJson.data.reference).set({
+        reference: initJson.data.reference, email, amount: ngnAmount, status: 'initialized', metadata: initJson.data.metadata||{}, createdAt: admin.firestore.Timestamp.now()
+      }).catch(()=>null);
     }
-
-    try {
-      await db
-        .collection('transactions')
-        .doc(initJson.data.reference)
-        .set({
-          reference: initJson.data.reference,
-          email,
-          amount: ngnAmount,
-          status: 'initialized',
-          metadata: initJson.data.metadata || {},
-          createdAt: admin.firestore.Timestamp.now(),
-        });
-    } catch (e) {
-      console.warn('Failed to write init transaction:', e.message || e);
-    }
-
-    return res.json({
-      authorization_url: initJson.data.authorization_url,
-      reference: initJson.data.reference,
-      amount: ngnAmount,
-    });
+    return res.json({ authorization_url: initJson.data.authorization_url, reference: initJson.data.reference, amount: ngnAmount });
   } catch (err) {
-    console.error('Init payment error:', err);
-    return res.status(500).json({ error: err.message });
+    console.error('/api/pay error', err);
+    return res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
-// 2) Verify payment
+// /api/verify - verify payment and record + email download link
 app.post('/api/verify', async (req, res) => {
   try {
     const { reference, purchaserEmail } = req.body;
     if (!reference) return res.status(400).json({ error: 'Reference required' });
-    if (!PAYSTACK_SECRET_KEY) return res.status(500).json({ error: 'Server misconfigured: missing Paystack secret key' });
 
-    const verifyResp = await fetch(`${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
-    });
-
-    const verifyJson = await verifyResp.json();
-
-    if (!verifyJson || verifyJson.status !== true) {
-      return res.json({ status: 'failed', data: verifyJson });
+    let verifyJson = null;
+    if (!PAYSTACK_SECRET_KEY) {
+      // simulate
+      if (db) {
+        const doc = await db.collection('transactions').doc(reference).get().catch(()=>null);
+        const saved = doc && doc.exists ? doc.data() : {};
+        verifyJson = { status: true, data: { reference, status: 'success', amount: saved.amount ? toKobo(saved.amount) : 0, customer: { email: purchaserEmail || saved.email || null }, metadata: saved.metadata || {} } };
+      } else {
+        verifyJson = { status: true, data: { reference, status: 'success', amount: 0, customer: { email: purchaserEmail || null }, metadata: {} } };
+      }
+    } else {
+      const vresp = await fetch(`${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`, { method: 'GET', headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } });
+      verifyJson = await vresp.json().catch(()=>null);
     }
 
+    if (!verifyJson || verifyJson.status !== true) return res.json({ status: 'failed', data: verifyJson });
     const tx = verifyJson.data;
-    if (tx.status !== 'success') return res.json({ status: 'failed', data: verifyJson });
+    if (!tx || tx.status !== 'success') return res.json({ status: 'failed', data: verifyJson });
 
-    const userEmail = purchaserEmail || tx.customer?.email || null;
+    const userEmail = purchaserEmail || (tx.customer && tx.customer.email) || null;
+    const metadata = tx.metadata || {};
+    const productId = metadata.productId || null;
+    const product = productId ? PRODUCTS[productId] : null;
+
+    const publicBase = process.env.PUBLIC_URL ? process.env.PUBLIC_URL.replace(/\/$/, '') : derivePublicUrl(req);
+    const pdfUrl = product ? `${publicBase}/${product.pdfPath.replace(/^\/+/, '')}` : (PUBLIC_PDF_URL || null);
     const ngnAmountPaid = (tx.amount || 0) / 100;
 
-    const record = {
-      reference: tx.reference,
-      email: userEmail,
-      status: 'success',
-      usd_price: tx.metadata?.usd_price || USD_PRICE,
-      ngn_amount: ngnAmountPaid,
-      fx_rate: tx.metadata?.fx_rate || null,
-      paystack: tx,
-      pdfUrl: PUBLIC_PDF_URL || null,
-      paidAt: admin.firestore.Timestamp.now(),
-    };
+    const record = { reference: tx.reference, email: userEmail, status: 'success', usd_price: metadata.usd_price || null, ngn_amount: ngnAmountPaid, fx_rate: metadata.fx_rate || null, paystack: tx, pdfUrl, paidAt: admin.firestore ? admin.firestore.Timestamp.now() : new Date(), productId: product ? product.id : null };
 
-    await db.collection('my_order').add(record);
+    if (db) {
+      await db.collection('my_order').add(record).catch(()=>null);
+      await db.collection('transactions').doc(tx.reference).set({ reference: tx.reference, email: userEmail, amount: ngnAmountPaid, status: 'success', paidAt: admin.firestore.Timestamp.now() }, { merge: true }).catch(()=>null);
+    }
 
-    await db
-      .collection('transactions')
-      .doc(tx.reference)
-      .set(
-        {
-          reference: tx.reference,
-          email: userEmail,
-          amount: ngnAmountPaid,
-          status: 'success',
-          paidAt: admin.firestore.Timestamp.now(),
-        },
-        { merge: true }
-      );
-
-    // email sending stays unchanged
-    if (EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && EMAILJS_PUBLIC_KEY && userEmail) {
+    if (EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && EMAILJS_PUBLIC_KEY && userEmail && pdfUrl) {
       try {
-        const emailPayload = {
-          service_id: EMAILJS_SERVICE_ID,
-          template_id: EMAILJS_TEMPLATE_ID,
-          public_key: EMAILJS_PUBLIC_KEY,
-          template_params: {
-            to_email: userEmail,
-            book_name: 'THE ULTIMATE QUOTE BUNDLE',
-            download_link: PUBLIC_PDF_URL,
-            reference: tx.reference,
-          },
-        };
-
-        const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(emailPayload),
-        });
-
-        const text = await emailRes.text().catch(() => null);
-
-        if (!emailRes.ok) {
-          console.error('❌ EmailJS error:', { status: emailRes.status, body: text });
-        }
-      } catch (e) {
-        console.error('❌ EmailJS send failed:', e.message || e);
-      }
+        const emailPayload = { service_id: EMAILJS_SERVICE_ID, template_id: EMAILJS_TEMPLATE_ID, public_key: EMAILJS_PUBLIC_KEY, template_params: { to_email: userEmail, book_name: product ? product.title : 'MindShift Books purchase', download_link: pdfUrl, reference: tx.reference } };
+        const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(emailPayload) });
+        const txt = await emailRes.text().catch(()=>null);
+        if (!emailRes.ok) console.error('EmailJS error', emailRes.status, txt);
+      } catch (e) { console.warn('EmailJS send failed', e.message || e); }
     }
 
     return res.json({ status: 'success', data: record });
   } catch (err) {
-    console.error('Verify error:', err);
-    return res.status(500).json({ error: err.message });
+    console.error('/api/verify error', err);
+    return res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
-// List orders
-app.get('/api/orders', async (req, res) => {
+// debug listing (optional)
+app.get('/debug/orders', async (req, res) => {
+  if (!db) return res.status(400).json({ error: 'No Firestore configured' });
   try {
-    const email = (req.query.email || '').toString().trim().toLowerCase();
-    if (!email) return res.status(400).json({ error: 'email query param required' });
+    const snap = await db.collection('my_order').orderBy('paidAt','desc').limit(100).get();
+    const out = [];
+    snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+    res.json({ count: out.length, orders: out });
+  } catch (e) { res.status(500).json({ error: e.message || 'Server error' }); }
+});
 
-    const snap = await db
-      .collection('my_order')
-      .where('email', '==', email)
-      .orderBy('paidAt', 'desc')
-      .get();
-
-    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    return res.json({ count: rows.length, rows });
-  } catch (e) {
-    console.error('Fetch orders error:', e);
-    return res.status(500).json({ error: e.message });
+// SPA fallback for index.html
+app.get('*', (req, res, next) => {
+  if (req.method === 'GET' && req.headers.accept && req.headers.accept.indexOf('text/html') !== -1) {
+    const p = req.path || '';
+    if (p.startsWith('/api') || p.startsWith('/files') || p.startsWith('/images')) return next();
+    return res.sendFile(path.join(__dirname, 'public', 'index.html'));
   }
+  return next();
 });
 
-// List transactions
-app.get('/api/transactions', async (req, res) => {
-  try {
-    const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(50).get();
-    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    return res.json(rows);
-  } catch (e) {
-    console.error('Fetch transactions error:', e);
-    return res.status(500).json({ error: e.message });
-  }
+app.listen(PORT, () => {
+  console.log(`MindShift Books server running on port ${PORT}`);
+  console.log(`Serving static: ${path.join(__dirname,'public')} and ${path.join(__dirname,'files')}`);
 });
-
-// SPA fallback
-app.get('*', (req, res) => {
-  res.sendFile(path.resolve(__dirname, 'public', 'index.html'));
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on ${PORT} (PUBLIC_URL=${PUBLIC_URL})`));
